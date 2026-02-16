@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block nav_checkins_active %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+  .grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .box{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--field-bg)}
+  .input{width:100%;padding:10px 12px;border-radius:14px;border:1px solid var(--line2);background:var(--field-bg);color:var(--text);outline:0;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>სწრაფი Check-in</h2>
+        <div class="sub">ბარათის ნომრით ან ტელეფონით</div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="row">
+        <input class="input" id="card" placeholder="ბარათის ნომერი (მაგ: CARD-001)" style="max-width:320px">
+        <span class="muted">ან</span>
+        <input class="input" id="phone" placeholder="ტელეფონი (555...)" style="max-width:260px">
+        <button class="btn primary" id="btnGo">✅ Check-in</button>
+      </div>
+
+      <div class="hint">თუ აბონემენტი ვადაგასულია — არ შეუშვებს. limited-ზე ვიზიტს ავტომატურად აკლებს.</div>
+
+      <div class="box" id="result" style="margin-top:14px;display:none"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const $ = (id)=>document.getElementById(id);
+
+  $("btnGo").addEventListener("click", async ()=>{
+    const card_number = $("card").value.trim();
+    const phone = $("phone").value.trim();
+
+    const payload = {};
+    if(card_number) payload.card_number = card_number;
+    if(!card_number && phone) payload.phone = phone;
+
+    if(!payload.card_number && !payload.phone){
+      toast("bad","შეცდომა","მიუთითე card_number ან phone"); return;
+    }
+
+    const res = await fetch("/api/checkins/quick/", {
+      method:"POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      body: JSON.stringify(payload)
+    });
+
+    const box = $("result");
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok){
+      toast("bad","ვერ მოხერხდა", data.detail || "შეცდომა");
+      box.style.display = "block";
+      box.innerHTML = `<div class="pill bad">⛔ ${data.detail || "შეცდომა"}</div>`;
+      return;
+    }
+
+    toast("ok","OK","Check-in დაფიქსირდა ✅");
+    box.style.display = "block";
+
+    const c = data.client;
+    const cm = data.client_membership;
+    box.innerHTML = `
+      <div class="pill ok">✅ შესვლა მიღებულია</div>
+      <div style="margin-top:10px;font-weight:900">${c.first_name} ${c.last_name}</div>
+      <div class="muted" style="margin-top:4px;">${c.phone || ""} • ბარათი: ${c.card_number || "—"}</div>
+      <div style="margin-top:10px;">
+        <div><b>აბონემენტი:</b> ${cm.membership_name}</div>
+        <div><b>ტიპი:</b> ${cm.membership_type}</div>
+        <div><b>ვადა:</b> ${cm.start_date} → ${cm.end_date || "—"}</div>
+        <div><b>დარჩენილი ვიზიტები:</b> ${cm.remaining_visits ?? "—"}</div>
+      </div>
+    `;
+  });
+</script>
+{% endblock %}

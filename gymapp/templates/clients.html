@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}კლიენტები • Gym Manager{% endblock %}
+{% block subtitle %}კლიენტების მართვა{% endblock %}
+{% block nav_clients_active %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+  .grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+  .tableWrap{
+    margin-top:12px;
+    border:1px solid var(--line);
+    border-radius:16px;
+    overflow:hidden;
+    background: var(--field-bg);
+  }
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{
+    text-align:left;
+    padding:12px 12px;
+    font-weight:900;
+    background: rgba(255,255,255,.03);
+    border-bottom:1px solid var(--line);
+    position:sticky; top:0;
+  }
+  tbody td{padding:12px 12px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
+  tbody tr:hover{background: rgba(38,153,165,.08)}
+
+  .avatar{
+    width:38px;height:38px;border-radius:14px;object-fit:cover;
+    border:1px solid var(--line2);
+    background: rgba(255,255,255,.06);
+  }
+
+  .kv{
+    display:grid;
+    grid-template-columns: 160px 1fr;
+    gap:10px 12px;
+    font-size:13px;
+  }
+  .kv label{color:var(--muted);font-weight:900}
+
+  .input{
+    width:100%;
+    padding:10px 12px;
+    border-radius:14px;
+    border:1px solid var(--line2);
+    background: var(--field-bg);
+    color:var(--text);
+    outline:0;
+  }
+  .select{appearance:none}
+
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+
+  /* modal body spacing */
+  .mbody .kv{grid-template-columns:180px 1fr}
+  @media (max-width: 760px){
+    .kv{grid-template-columns:1fr}
+    .mbody .kv{grid-template-columns:1fr}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>კლიენტების სია</h2>
+        <div class="sub">ძებნა ტელეფონით/სახელით/გვარით/ბარათის ნომრით</div>
+      </div>
+      <div class="row">
+        <span class="pill" id="countPill">0 კლიენტი</span>
+        <button class="btn primary" id="btnOpenNew" type="button">+ ახალი კლიენტი</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="row">
+        <div class="field" style="flex:1;min-width:260px;">
+          <span>🔎</span>
+          <input id="q" placeholder="მაგ: 555... / გიორგი / CARD-001" autocomplete="off">
+        </div>
+        <button class="btn primary" id="btnSearch" type="button">ძებნა</button>
+        <button class="btn" id="btnReset" type="button">გასუფთავება</button>
+      </div>
+      <div class="hint">ფოტოს ატვირთვა მუშაობს multipart/form-data-ით.</div>
+
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:34%">კლიენტი</th>
+              <th style="width:18%">ტელეფონი</th>
+              <th style="width:18%">ელ. ფოსტა</th>
+              <th style="width:20%">ორგანიზაცია</th>
+              <th style="width:10%">ქმედება</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Client Modal -->
+<div class="modalOverlay" id="overlayNew">
+  <div class="modal">
+    <div class="mhead">
+      <strong>ახალი კლიენტი</strong>
+      <button class="closeX" id="closeNew" type="button">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="kv">
+        <label>სახელი *</label>
+        <input class="input" id="c_first" placeholder="გიორგი">
+
+        <label>გვარი *</label>
+        <input class="input" id="c_last" placeholder="კაპანაძე">
+
+        <label>დაბ. თარიღი</label>
+        <input class="input" id="c_birth" type="date">
+
+        <label>სქესი</label>
+        <select class="input select" id="c_gender">
+          <option value="">—</option>
+          <option value="male">მამრობითი</option>
+          <option value="female">მდედრობითი</option>
+          <option value="other">სხვა</option>
+        </select>
+
+        <label>ტელეფონი *</label>
+        <input class="input" id="c_phone" placeholder="555123456">
+
+        <label>ელ. ფოსტა</label>
+        <input class="input" id="c_email" type="email" placeholder="name@mail.com">
+
+        <label>ორგანიზაცია</label>
+        <input class="input" id="c_org" placeholder="Company / Organization">
+
+        <label>ბარათის ნომერი</label>
+        <input class="input" id="c_card" placeholder="CARD-001">
+
+        <label>ფოტოსურათი</label>
+        <input class="input" id="c_photo" type="file" accept="image/*">
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn primary" id="btnSave" type="button">შენახვა</button>
+        <button class="btn" id="btnCancel" type="button">გაუქმება</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- View Modal -->
+<div class="modalOverlay" id="overlayView">
+  <div class="modal">
+    <div class="mhead">
+      <strong id="vTitle">კლიენტი</strong>
+      <button class="closeX" id="closeView" type="button">✕</button>
+    </div>
+    <div class="mbody" id="vBody"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const $ = (id)=>document.getElementById(id);
+
+  const overlayNew = $("overlayNew");
+  const overlayView = $("overlayView");
+
+  function openNew(){ overlayNew.classList.add("show"); }
+  function closeNew(){ overlayNew.classList.remove("show"); }
+  function openView(){ overlayView.classList.add("show"); }
+  function closeView(){ overlayView.classList.remove("show"); }
+
+  $("btnOpenNew").addEventListener("click", openNew);
+  $("closeNew").addEventListener("click", closeNew);
+  $("btnCancel").addEventListener("click", closeNew);
+  overlayNew.addEventListener("click", (e)=>{ if(e.target===overlayNew) closeNew(); });
+
+  $("closeView").addEventListener("click", closeView);
+  overlayView.addEventListener("click", (e)=>{ if(e.target===overlayView) closeView(); });
+
+  function genderLabel(g){
+    if(g === "male") return "მამრობითი";
+    if(g === "female") return "მდედრობითი";
+    if(g === "other") return "სხვა";
+    return "—";
+  }
+
+  function photoUrl(v){
+    if(!v) return null;
+    // თუ backend აბრუნებს absolute URL-ს ან relative-ს, ორივე იმუშავებს
+    if(String(v).startsWith("http://") || String(v).startsWith("https://")) return v;
+    if(String(v).startsWith("/")) return v;
+    return "/" + v;
+  }
+
+  function avatarHtml(photo){
+    const u = photoUrl(photo);
+    if(u) return `<img class="avatar" src="${u}" alt="photo">`;
+    return `<div class="avatar" style="display:grid;place-items:center;font-weight:900;">👤</div>`;
+  }
+
+  let lastLoaded = []; // fallback filter-სთვის
+
+  function renderRows(items){
+    lastLoaded = items || [];
+    const tbody = $("tbody");
+    tbody.innerHTML = "";
+    $("countPill").textContent = `${(items||[]).length} კლიენტი`;
+
+    for(const c of (items||[])){
+      const full = `${c.first_name || ""} ${c.last_name || ""}`.trim();
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            ${avatarHtml(c.photo)}
+            <div>
+              <div style="font-weight:900">${full || "—"}</div>
+              <div class="muted" style="font-size:12px;margin-top:3px;">
+                ბარათი: ${c.card_number || "—"} • სქესი: ${genderLabel(c.gender)} • დაბ: ${c.birth_date || "—"}
+              </div>
+            </div>
+          </div>
+        </td>
+        <td>${c.phone || "—"}</td>
+        <td>${c.email || "—"}</td>
+        <td>${c.organization || "—"}</td>
+        <td>
+          <button class="btn" data-view="${c.id}" type="button">👁️ ნახვა</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    tbody.querySelectorAll("[data-view]").forEach(btn=>{
+      btn.addEventListener("click", ()=> viewClient(Number(btn.getAttribute("data-view"))));
+    });
+  }
+
+  function localFilter(q){
+    q = (q||"").trim().toLowerCase();
+    if(!q) return lastLoaded;
+    return (lastLoaded||[]).filter(c=>{
+      const full = (`${c.first_name||""} ${c.last_name||""}`).toLowerCase();
+      const phone = (c.phone||"").toLowerCase();
+      const card = (c.card_number||"").toLowerCase();
+      return full.includes(q) || phone.includes(q) || card.includes(q);
+    });
+  }
+
+  async function loadClients(q=""){
+    // 1) პირველ რიგში ვცადოთ backend search
+    const url = q ? `/api/clients/?search=${encodeURIComponent(q)}` : "/api/clients/";
+    let res = await fetch(url);
+
+    // 2) თუ search არ გიჭერს backend-ზე -> ჩამოვიტანოთ ყველა და frontend-ზე გავფილტროთ
+    if(!res.ok && q){
+      res = await fetch("/api/clients/");
+      if(!res.ok){
+        toast("bad","შეცდომა","კლიენტების ჩამოტვირთვა ვერ მოხერხდა.");
+        return;
+      }
+      const all = await res.json();
+      renderRows(all);
+      renderRows(localFilter(q));
+      return;
+    }
+
+    if(!res.ok){
+      toast("bad","შეცდომა","კლიენტების ჩამოტვირთვა ვერ მოხერხდა.");
+      return;
+    }
+
+    const data = await res.json();
+    renderRows(data);
+  }
+
+  async function viewClient(id){
+    const res = await fetch(`/api/clients/${id}/`);
+    if(!res.ok){
+      toast("bad","შეცდომა","კლიენტის გახსნა ვერ მოხერხდა.");
+      return;
+    }
+    const c = await res.json();
+    const full = `${c.first_name || ""} ${c.last_name || ""}`.trim();
+
+    $("vTitle").textContent = full || "კლიენტი";
+    $("vBody").innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+        ${avatarHtml(c.photo)}
+        <div>
+          <div style="font-weight:900;font-size:16px;">${full || "—"}</div>
+          <div class="muted" style="margin-top:4px;">${c.phone || "—"} • ${c.email || "—"}</div>
+        </div>
+      </div>
+
+      <div class="kv">
+        <label>დაბ. თარიღი</label><div>${c.birth_date || "—"}</div>
+        <label>სქესი</label><div>${genderLabel(c.gender)}</div>
+        <label>ორგანიზაცია</label><div>${c.organization || "—"}</div>
+        <label>ბარათის ნომერი</label><div>${c.card_number || "—"}</div>
+        <label>ტრენერი</label><div>${c.trainer_name || "—"}</div>
+        <label>აბონემენტი</label><div>${c.active_membership_name || "—"}</div>
+        <label>სტატუსი</label><div>${(c.is_active === true) ? "აქტიურია" : ((c.is_active === false) ? "ვადაგასულია" : "—")}</div>
+      </div>
+    `;
+    openView();
+  }
+
+  $("btnSearch").addEventListener("click", ()=> loadClients($("q").value));
+  $("btnReset").addEventListener("click", ()=> { $("q").value=""; loadClients(""); });
+  $("q").addEventListener("keydown", (e)=>{ if(e.key==="Enter") loadClients($("q").value); });
+
+  $("btnSave").addEventListener("click", async ()=>{
+    const first_name = $("c_first").value.trim();
+    const last_name  = $("c_last").value.trim();
+    const phone      = $("c_phone").value.trim();
+
+    if(!first_name || !last_name || !phone){
+      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, ტელეფონი.");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append("first_name", first_name);
+    fd.append("last_name", last_name);
+    fd.append("phone", phone);
+
+    const birth = $("c_birth").value;
+    const gender = $("c_gender").value;
+    const email = $("c_email").value.trim();
+    const org = $("c_org").value.trim();
+    const card = $("c_card").value.trim();
+    const photo = $("c_photo").files[0];
+
+    if(birth) fd.append("birth_date", birth);
+    if(gender) fd.append("gender", gender);
+    if(email) fd.append("email", email);
+    if(org) fd.append("organization", org);
+    if(card) fd.append("card_number", card);
+    if(photo) fd.append("photo", photo);
+
+    const res = await fetch("/api/clients/", {
+      method: "POST",
+      headers: { "X-CSRFToken": csrftoken },
+      body: fd
+    });
+
+    if(!res.ok){
+      let err = {};
+      try{ err = await res.json(); }catch(e){}
+      // DRF validation dict ხშირად {"field":["..."]} მოდის
+      const msg = err.detail
+        || (err.card_number && err.card_number[0])
+        || (err.phone && err.phone[0])
+        || JSON.stringify(err)
+        || "შეამოწმე მონაცემები.";
+      toast("bad","ვერ შეინახა", msg);
+      return;
+    }
+
+    toast("ok","შენახულია","ახალი კლიენტი დაემატა ✅");
+    closeNew();
+
+    ["c_first","c_last","c_phone","c_email","c_org","c_card"].forEach(id=>$(id).value="");
+    $("c_birth").value="";
+    $("c_gender").value="";
+    $("c_photo").value="";
+
+    await loadClients($("q").value.trim());
+  });
+
+  // init
+  loadClients("");
+</script>
+{% endblock %}

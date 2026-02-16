@@ -1,0 +1,4 @@
+cd C:\Users\ikopaliani2707\Desktop\gym\python 32 bit\.env\Scripts
+activate
+cd C:\Users\ikopaliani2707\Desktop\gym\gym
+python manage.py runserver

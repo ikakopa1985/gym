@@ -1,0 +1,378 @@
+{% load static %}
+<!doctype html>
+<html lang="ka" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{% block title %}Gym Manager{% endblock %}</title>
+
+  <style>
+    /* =========================
+       THEME TOKENS (BASE)
+       - dark / light switch via html[data-theme]
+    ========================= */
+
+    html[data-theme="dark"]{
+      --bg:#071c21;
+      --text:#eaf7fa;
+      --muted:#a7cbd1;
+
+      --panel: rgba(12,43,49,.70);
+      --panel2: rgba(10,35,40,.72);
+
+      --brand:#2699A5;
+      --brand2:#1D6271;
+      --accent:#FF6F59;
+
+      --ok:#2bd576;
+      --bad:#ff4d4d;
+
+      --line:rgba(255,255,255,.08);
+      --line2:rgba(255,255,255,.12);
+
+      --shadow: 0 18px 60px rgba(0,0,0,.35);
+      --radius:18px;
+      --radius2:14px;
+
+      --bg-grad-1: rgba(38,153,165,.25);
+      --bg-grad-2: rgba(255,111,89,.18);
+      --field-bg: rgba(0,0,0,.18);
+      --btn-bg: rgba(255,255,255,.04);
+      --toast-bg: rgba(10,35,40,.92);
+    }
+
+    html[data-theme="light"]{
+      --bg:#f6fbfc;
+      --text:#0b1f24;
+      --muted:#456a70;
+
+      --panel: rgba(255,255,255,.78);
+      --panel2: rgba(255,255,255,.72);
+
+      --brand:#2699A5;
+      --brand2:#1D6271;
+      --accent:#FF6F59;
+
+      --ok:#17a85a;
+      --bad:#d63a3a;
+
+      --line:rgba(0,0,0,.08);
+      --line2:rgba(0,0,0,.12);
+
+      --shadow: 0 18px 60px rgba(0,0,0,.10);
+      --radius:18px;
+      --radius2:14px;
+
+      --bg-grad-1: rgba(38,153,165,.16);
+      --bg-grad-2: rgba(255,111,89,.10);
+      --field-bg: rgba(0,0,0,.04);
+      --btn-bg: rgba(0,0,0,.03);
+      --toast-bg: rgba(255,255,255,.92);
+    }
+
+    :root{
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--font);
+      background:
+        radial-gradient(1200px 800px at 20% -10%, var(--bg-grad-1), transparent 60%),
+        radial-gradient(900px 700px at 100% 10%, var(--bg-grad-2), transparent 55%),
+        var(--bg);
+      color:var(--text);
+    }
+
+    a{color:inherit;text-decoration:none}
+    .wrap{max-width:1400px;margin:0 auto;padding:22px 18px 40px}
+
+    /* =========================
+       TOPBAR + NAV
+    ========================= */
+    .topbar{
+      display:flex;align-items:center;justify-content:space-between;gap:16px;
+      padding:16px 18px;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      box-shadow:var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .brand{display:flex;align-items:center;gap:12px;min-width:260px}
+    .logo{
+      width:42px;height:42px;border-radius:14px;
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      display:grid;place-items:center;font-weight:900;letter-spacing:.5px;
+      color:#fff;
+    }
+    .brand h1{margin:0;font-size:16px;line-height:1.2;font-weight:900}
+    .brand p{margin:2px 0 0;font-size:12px;color:var(--muted)}
+
+    .navRow{
+      display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;
+    }
+    .nav{
+      display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    }
+    .nav a{
+      padding:10px 12px;border-radius:14px;border:1px solid var(--line);
+      background: var(--btn-bg);font-weight:900;font-size:13px;
+      transition:.15s ease;
+    }
+    .nav a:hover{transform:translateY(-1px);border-color: rgba(38,153,165,.45)}
+    .nav a.active{
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      border-color: rgba(38,153,165,.55);
+      color:#fff;
+    }
+
+    /* Theme toggle */
+    .themeBtn{
+      border:1px solid var(--line);
+      background: var(--btn-bg);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:14px;
+      cursor:pointer;
+      font-weight:900;
+      font-size:13px;
+      transition:.15s ease;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      user-select:none;
+    }
+    .themeBtn:hover{transform: translateY(-1px); border-color: rgba(38,153,165,.45)}
+
+    /* =========================
+       UI PRIMITIVES
+    ========================= */
+    .card{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      box-shadow:var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow:hidden;
+    }
+    .card .head{
+      padding:14px 16px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+      border-bottom:1px solid var(--line);
+    }
+    .card .head h2{margin:0;font-size:14px;font-weight:900;letter-spacing:.2px}
+    .card .head .sub{font-size:12px;color:var(--muted)}
+    .card .body{padding:14px 16px}
+
+    .btn{
+      border:1px solid var(--line);
+      background: var(--btn-bg);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:14px;
+      cursor:pointer;
+      font-weight:900;
+      font-size:13px;
+      transition:.15s ease;
+      display:inline-flex;align-items:center;gap:8px;
+      user-select:none;
+    }
+    .btn:hover{transform: translateY(-1px); border-color: rgba(38,153,165,.45)}
+    .btn.primary{
+      background: linear-gradient(135deg, var(--brand), var(--brand2));
+      border-color: rgba(38,153,165,.55);
+      color:#fff;
+    }
+    .btn.danger{
+      background: rgba(255,77,77,.12);
+      border-color: rgba(255,77,77,.35);
+      color: #ffd6d6;
+    }
+
+    .field{
+      display:flex;align-items:center;gap:10px;
+      border:1px solid var(--line);
+      background: var(--field-bg);
+      border-radius:14px;
+      padding:10px 12px;
+    }
+    .field input,.field select{
+      width:100%;
+      border:0;outline:0;background:transparent;color:var(--text);font-size:14px;
+    }
+    .hint{margin-top:10px;font-size:12px;color:var(--muted)}
+    .muted{color:var(--muted)}
+
+    .pill{
+      display:inline-flex;align-items:center;gap:6px;
+      padding:6px 10px;border-radius:999px;
+      font-weight:900;font-size:12px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.03);
+    }
+    .pill.ok{border-color: rgba(43,213,118,.35); background: rgba(43,213,118,.10); color:#d5ffe8;}
+    .pill.bad{border-color: rgba(255,77,77,.35); background: rgba(255,77,77,.10); color:#ffd6d6;}
+
+    /* Toast */
+    .toast{
+      position:fixed;bottom:18px;left:50%;
+      transform:translateX(-50%);
+      background: var(--toast-bg);
+      border:1px solid var(--line);
+      padding:12px 14px;border-radius:14px;
+      box-shadow: var(--shadow);
+      display:none;gap:10px;align-items:flex-start;
+      max-width: 92vw;width: 520px;
+      backdrop-filter: blur(10px);
+      z-index:50;
+    }
+    .toast.show{display:flex}
+    .toast .dot{width:10px;height:10px;border-radius:99px;margin-top:4px;background:var(--brand)}
+    .toast.bad .dot{background: var(--bad)}
+    .toast.ok .dot{background: var(--ok)}
+    .toast .t{font-weight:900}
+    .toast .m{color:var(--muted);font-size:13px;margin-top:2px}
+
+    /* Modal */
+    .modalOverlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.55);
+      display:none;align-items:center;justify-content:center;
+      padding:18px; z-index:60;
+    }
+    .modalOverlay.show{display:flex}
+    .modal{
+      width:min(780px, 96vw);
+      border-radius:20px;
+      border:1px solid var(--line);
+      background: linear-gradient(180deg, var(--panel), var(--panel2));
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .modal .mhead{
+      padding:14px 16px;border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;gap:12px;
+    }
+    .modal .mhead strong{font-size:14px}
+    .modal .mbody{padding:14px 16px}
+    .closeX{
+      border:1px solid var(--line);
+      background: var(--btn-bg);
+      color:var(--text);
+      border-radius:12px;padding:8px 10px;
+      cursor:pointer;font-weight:900;
+    }
+
+    @media (max-width: 980px){
+      .brand{min-width:auto}
+    }
+  </style>
+
+  {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">GYM</div>
+        <div>
+          <h1>{% block header_title %}Gym Manager{% endblock %}</h1>
+          <p>{% block subtitle %}კლიენტები • აბონემენტები • Check-in • გადახდები{% endblock %}</p>
+        </div>
+      </div>
+
+      <div class="navRow">
+        <nav class="nav">
+        <a href="/" class="{% block nav_home_active %}{% endblock %}">🏠 მთავარი</a>
+        <a href="/clients/" class="{% block nav_clients_active %}{% endblock %}">👥 კლიენტები</a>
+        <a href="/trainers/" class="{% block nav_trainers_active %}{% endblock %}">🏋️ მწვრთნელები</a>
+        <a href="/memberships/" class="{% block nav_memberships_active %}{% endblock %}">🎟️ აბონემენტები</a>
+        <a href="/payments/" class="{% block nav_payments_active %}{% endblock %}">💳 გადახდები</a>
+        <a href="/checkins/" class="{% block nav_checkins_active %}{% endblock %}">✅ ჩეკინები</a>
+        <a href="/reports/" class="{% block nav_reports_active %}{% endblock %}">📊 რაპორტები</a>
+      </nav>
+
+      <button class="themeBtn" id="themeToggle" type="button" title="დღე/ღამე">
+        <span id="themeIcon">🌙</span> <span id="themeText">ღამე</span>
+      </button>
+
+      </div>
+    </div>
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <div class="dot"></div>
+    <div>
+      <div class="t" id="toastTitle">შეტყობინება</div>
+      <div class="m" id="toastMsg">...</div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Toast helper
+    function toast(type, title, msg){
+      const t = document.getElementById("toast");
+      t.classList.remove("ok","bad");
+      if(type) t.classList.add(type);
+      document.getElementById("toastTitle").textContent = title || "შეტყობინება";
+      document.getElementById("toastMsg").textContent = msg || "";
+      t.classList.add("show");
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(()=> t.classList.remove("show"), 2600);
+    }
+
+    // ===== CSRF helper (SessionAuth)
+    function getCookie(name){
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== "") {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + "=")) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+    const csrftoken = getCookie("csrftoken");
+
+    // ===== Theme toggle
+   const root = document.documentElement;
+  const btn = document.getElementById("themeToggle");
+  const icon = document.getElementById("themeIcon");
+  const txt = document.getElementById("themeText");
+
+  function applyTheme(theme){
+    root.setAttribute("data-theme", theme);
+    if(theme === "light"){
+      icon.textContent = "☀️";
+      txt.textContent = "დღე";
+    }else{
+      icon.textContent = "🌙";
+      txt.textContent = "ღამე";
+    }
+  }
+
+  const saved = localStorage.getItem("gym_theme");
+  applyTheme(saved || "dark");
+
+  btn.addEventListener("click", ()=>{
+    const current = root.getAttribute("data-theme") || "dark";
+    const next = current === "dark" ? "light" : "dark";
+    localStorage.setItem("gym_theme", next);
+    applyTheme(next);
+  });
+  </script>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

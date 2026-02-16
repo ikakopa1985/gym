@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block title %}რაპორტები • Gym Manager{% endblock %}
+{% block subtitle %}ფინანსები • სტატისტიკა • ანალიტიკა{% endblock %}
+{% block nav_reports_active %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+  .grid{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px;}
+  @media (max-width: 980px){ .grid{grid-template-columns:1fr;} }
+
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .filters{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+  }
+  .input{
+    width:100%;
+    padding:10px 12px;
+    border-radius:14px;
+    border:1px solid var(--line2);
+    background: var(--field-bg);
+    color:var(--text);
+    outline:0;
+  }
+
+  .stats{
+    display:grid;
+    gap:12px;
+  }
+  .stat{
+    padding:14px 14px;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    background: var(--field-bg);
+  }
+  .stat .k{font-size:12px;color:var(--muted);font-weight:900}
+  .stat .v{font-size:22px;font-weight:950;margin-top:6px}
+  .stat .s{font-size:12px;color:var(--muted);margin-top:4px}
+
+  .split{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+  }
+  @media (max-width: 620px){ .split{grid-template-columns:1fr;} }
+
+  .tableWrap{
+    margin-top:12px;border:1px solid var(--line);
+    border-radius:16px;overflow:hidden;background:var(--field-bg);
+  }
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{
+    text-align:left;padding:12px 12px;font-weight:900;
+    background: rgba(255,255,255,.03);border-bottom:1px solid var(--line);
+    position:sticky; top:0;
+  }
+  tbody td{padding:12px 12px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle}
+  tbody tr:hover{background: rgba(38,153,165,.08)}
+
+  .barRow{
+    display:flex;justify-content:space-between;gap:10px;align-items:center;
+    padding:10px 0;border-bottom:1px dashed rgba(255,255,255,.10);
+  }
+  .barRow:last-child{border-bottom:0}
+  .name{font-weight:900}
+  .num{font-weight:950}
+  .muted{color:var(--muted)}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+
+  <!-- LEFT: main reports -->
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>რაპორტები</h2>
+        <div class="sub">თარიღების ფილტრი • გადახდები • TOP-ები</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnToday" type="button">📅 დღეს</button>
+        <button class="btn" id="btnThisMonth" type="button">🗓️ ეს თვე</button>
+        <button class="btn primary" id="btnApply" type="button">✅ Apply</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="filters">
+        <div style="min-width:200px;flex:1">
+          <div class="muted" style="font-size:12px;font-weight:900;margin-bottom:6px">From</div>
+          <input class="input" id="f_from" type="date">
+        </div>
+        <div style="min-width:200px;flex:1">
+          <div class="muted" style="font-size:12px;font-weight:900;margin-bottom:6px">To</div>
+          <input class="input" id="f_to" type="date">
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <button class="btn" id="btnClear" type="button">🧹 Clear</button>
+          <button class="btn" id="btnReload" type="button">🔄 Reload</button>
+        </div>
+      </div>
+
+      <div class="hint">თუ /api/reports/summary/ გაქვს — გამოიყენებს. თუ არა, თვითონ ითვლის /api/payments/ მონაცემებიდან.</div>
+
+      <div class="split" style="margin-top:12px">
+        <div class="stat">
+          <div class="k">შემოსავალი (ფილტრით)</div>
+          <div class="v" id="sumTotal">0₾</div>
+          <div class="s">სულ თანხა (Payment.amount)</div>
+        </div>
+        <div class="stat">
+          <div class="k">გადახდების რაოდენობა</div>
+          <div class="v" id="sumCount">0</div>
+          <div class="s">Payment ჩანაწერები</div>
+        </div>
+      </div>
+
+      <div class="split" style="margin-top:10px">
+        <div class="stat">
+          <div class="k">აბონემენტების ჯამი</div>
+          <div class="v" id="sumMembership">0₾</div>
+          <div class="s">Payment.membership_amount</div>
+        </div>
+        <div class="stat">
+          <div class="k">ტრენერების ჯამი</div>
+          <div class="v" id="sumTrainer">0₾</div>
+          <div class="s">Payment.trainer_fee</div>
+        </div>
+      </div>
+
+      <div class="split" style="margin-top:10px">
+        <div class="stat">
+          <div class="k">აქტიური კლიენტები</div>
+          <div class="v" id="activeClients">—</div>
+          <div class="s">Client.is_active თუ გაქვს</div>
+        </div>
+        <div class="stat">
+          <div class="k">ვადაგასული კლიენტები</div>
+          <div class="v" id="expiredClients">—</div>
+          <div class="s">Client.is_active თუ გაქვს</div>
+        </div>
+      </div>
+
+      <div class="tableWrap" style="max-height:360px; overflow:auto; margin-top:14px;">
+        <table>
+          <thead>
+            <tr>
+              <th>თარიღი</th>
+              <th>კლიენტი</th>
+              <th>ტრენერი</th>
+              <th>აბონემენტი</th>
+              <th>აბონ(₾)</th>
+              <th>ტრენ(₾)</th>
+              <th>სულ(₾)</th>
+              <th>მეთოდი</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyPayments"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: top lists -->
+  <div class="stats">
+
+    <div class="card">
+      <div class="head">
+        <h2>TOP ტრენერები</h2>
+        <div class="sub">შემოსავალი (trainer_fee ჯამი)</div>
+      </div>
+      <div class="body" id="topTrainers">
+        <div class="muted">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head">
+        <h2>TOP აბონემენტები</h2>
+        <div class="sub">გაყიდვები (membership_amount ჯამი)</div>
+      </div>
+      <div class="body" id="topMemberships">
+        <div class="muted">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head">
+        <h2>შენიშვნები</h2>
+        <div class="sub">MVP</div>
+      </div>
+      <div class="body">
+        <div class="muted" style="line-height:1.6">
+          • Apply ფილტრი მუშაობს From/To-ზე<br>
+          • თუ To ცარიელია — დღევანდელამდე ითვლის<br>
+          • თუ From ცარიელია — ყველა ჩანაწერს ითვლის<br>
+          • Payment.amount უკვე უნდა იყოს membership+trainer ჯამი
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const $ = (id)=>document.getElementById(id);
+
+  function isoToday(){
+    const d = new Date();
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    const dd = String(d.getDate()).padStart(2,"0");
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
+  function isoMonthStart(){
+    const d = new Date();
+    const mm = String(d.getMonth()+1).padStart(2,"0");
+    return `${d.getFullYear()}-${mm}-01`;
+  }
+  function toNum(x){
+    const n = Number(x ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  }
+  function fmtGel(n){
+    const x = toNum(n);
+    return x.toLocaleString("ka-GE", {minimumFractionDigits:2, maximumFractionDigits:2}) + "₾";
+  }
+  function inRange(createdAt, from, to){
+    if(!createdAt) return true;
+    const d = String(createdAt).slice(0,10); // YYYY-MM-DD
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  }
+
+  function renderPayments(items){
+    const tb = $("tbodyPayments");
+    tb.innerHTML = "";
+    for(const p of items){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${(p.created_at||"").slice(0,19).replace("T"," ")}</td>
+        <td>${p.client_name || "—"}</td>
+        <td>${p.trainer_name || "—"}</td>
+        <td>${p.membership_name || "—"}</td>
+        <td>${toNum(p.membership_amount).toFixed(2)}₾</td>
+        <td>${toNum(p.trainer_fee).toFixed(2)}₾</td>
+        <td style="font-weight:950">${toNum(p.amount).toFixed(2)}₾</td>
+        <td>${p.method || "—"}</td>
+      `;
+      tb.appendChild(tr);
+    }
+  }
+
+  function renderTop(containerId, rows){
+    const el = $(containerId);
+    if(!rows.length){
+      el.innerHTML = `<div class="muted">—</div>`;
+      return;
+    }
+    el.innerHTML = rows.map(r=>`
+      <div class="barRow">
+        <div class="name">${r.name}</div>
+        <div class="num">${fmtGel(r.value)}</div>
+      </div>
+    `).join("");
+  }
+
+  function summarizeFromPayments(payments){
+    let total = 0, memSum = 0, trSum = 0;
+
+    const byTrainer = new Map();      // trainer_name -> sum trainer_fee
+    const byMembership = new Map();   // membership_name -> sum membership_amount
+
+    for(const p of payments){
+      total += toNum(p.amount);
+      memSum += toNum(p.membership_amount);
+      trSum  += toNum(p.trainer_fee);
+
+      const tname = p.trainer_name || "უცნობი";
+      byTrainer.set(tname, (byTrainer.get(tname)||0) + toNum(p.trainer_fee));
+
+      const mname = p.membership_name || "უცნობი";
+      byMembership.set(mname, (byMembership.get(mname)||0) + toNum(p.membership_amount));
+    }
+
+    const topT = Array.from(byTrainer.entries())
+      .map(([name,value])=>({name,value}))
+      .sort((a,b)=>b.value-a.value)
+      .slice(0,8);
+
+    const topM = Array.from(byMembership.entries())
+      .map(([name,value])=>({name,value}))
+      .sort((a,b)=>b.value-a.value)
+      .slice(0,8);
+
+    return { total, memSum, trSum, count: payments.length, topT, topM };
+  }
+
+  async function loadClientsActiveInfo(){
+    // optional: თუ ClientSerializer აბრუნებს is_active, გამოვითვლით აქტიურს/ვადაგასულს
+    try{
+      const res = await fetch("/api/clients/");
+      if(!res.ok) return {active:null, expired:null};
+      const data = await res.json();
+      const has = data.some(x => typeof x.is_active === "boolean");
+      if(!has) return {active:null, expired:null};
+
+      const active = data.filter(x=>x.is_active === true).length;
+      const expired = data.filter(x=>x.is_active === false).length;
+      return {active, expired};
+    }catch(e){
+      return {active:null, expired:null};
+    }
+  }
+
+  async function loadSummary(from, to){
+    // 1) ვცადოთ reports endpoint თუ გაქვს
+    const qs = new URLSearchParams();
+    if(from) qs.set("from", from);
+    if(to) qs.set("to", to);
+
+    try{
+      const res = await fetch(`/api/reports/summary/?${qs.toString()}`);
+      if(res.ok){
+        const s = await res.json();
+        // ელოდება: {total, count, membership_sum, trainer_sum, top_trainers, top_memberships, payments:[]}
+        $("sumTotal").textContent = fmtGel(s.total);
+        $("sumCount").textContent = s.count ?? 0;
+        $("sumMembership").textContent = fmtGel(s.membership_sum);
+        $("sumTrainer").textContent = fmtGel(s.trainer_sum);
+
+        renderTop("topTrainers", (s.top_trainers||[]).map(x=>({name:x.name, value:x.value})));
+        renderTop("topMemberships", (s.top_memberships||[]).map(x=>({name:x.name, value:x.value})));
+
+        if(Array.isArray(s.payments)) renderPayments(s.payments);
+        return true;
+      }
+    }catch(e){}
+
+    // 2) fallback: payments-იდან დათვლა
+    const pres = await fetch("/api/payments/");
+    if(!pres.ok){
+      toast("bad","შეცდომა","გადახდების ჩამოტვირთვა ვერ მოხერხდა.");
+      return false;
+    }
+    const all = await pres.json();
+    const filtered = (all||[]).filter(p => inRange(p.created_at, from, to));
+    renderPayments(filtered);
+
+    const s = summarizeFromPayments(filtered);
+    $("sumTotal").textContent = fmtGel(s.total);
+    $("sumCount").textContent = s.count;
+    $("sumMembership").textContent = fmtGel(s.memSum);
+    $("sumTrainer").textContent = fmtGel(s.trSum);
+
+    renderTop("topTrainers", s.topT);
+    renderTop("topMemberships", s.topM);
+    return true;
+  }
+
+  async function apply(){
+    const from = $("f_from").value || "";
+    const to = $("f_to").value || "";
+    const ok = await loadSummary(from, to);
+
+    const ci = await loadClientsActiveInfo();
+    $("activeClients").textContent = (ci.active === null) ? "—" : ci.active;
+    $("expiredClients").textContent = (ci.expired === null) ? "—" : ci.expired;
+
+    if(ok) toast("ok","OK","რაპორტი განახლდა ✅");
+  }
+
+  $("btnApply").addEventListener("click", apply);
+  $("btnReload").addEventListener("click", apply);
+
+  $("btnToday").addEventListener("click", ()=>{
+    const t = isoToday();
+    $("f_from").value = t;
+    $("f_to").value = t;
+    apply();
+  });
+
+  $("btnThisMonth").addEventListener("click", ()=>{
+    $("f_from").value = isoMonthStart();
+    $("f_to").value = isoToday();
+    apply();
+  });
+
+  $("btnClear").addEventListener("click", ()=>{
+    $("f_from").value = "";
+    $("f_to").value = "";
+    apply();
+  });
+
+  // init default: this month
+  $("f_from").value = isoMonthStart();
+  $("f_to").value = isoToday();
+  apply();
+</script>
+{% endblock %}
