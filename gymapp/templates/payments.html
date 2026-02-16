@@ -16,9 +16,36 @@
   tbody tr:hover{background:rgba(38,153,165,.08)}
   .tdActions{white-space:nowrap;display:flex;gap:8px;align-items:center}
   @media (max-width: 900px){ .kv{grid-template-columns:1fr} }
-
   .muted{color:var(--muted)}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+
+  /* Client combo (searchable dropdown) */
+  .combo{position:relative;width:100%}
+  .comboInput{
+    width:100%;padding:10px 12px;border-radius:14px;border:1px solid var(--line2);
+    background:var(--field-bg);color:var(--text);outline:0;
+  }
+  .comboList{
+    position:absolute;left:0;right:0;top:calc(100% + 8px);
+    border:1px solid var(--line);
+    background:rgba(10,35,40,.98);
+    border-radius:14px;
+    max-height:260px;
+    overflow:auto;
+    display:none;
+    z-index:30;
+    box-shadow: var(--shadow);
+  }
+  .comboList.show{display:block}
+  .comboItem{
+    padding:10px 12px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    cursor:pointer;
+    display:flex;justify-content:space-between;gap:10px;
+  }
+  .comboItem:hover{background:rgba(38,153,165,.12)}
+  .comboItem:last-child{border-bottom:0}
+  .miniTag{font-size:12px;color:var(--muted)}
 </style>
 {% endblock %}
 
@@ -30,7 +57,7 @@
     <div class="head">
       <div>
         <h2>გადახდა</h2>
-        <div class="sub">ტრენერს ირჩევ გადახდისას და ინახება Payment-ზე</div>
+        <div class="sub">კლიენტის ძებნა dropdown-ით • + ღილაკით კლიენტის დამატება • ოპერაციის თარიღი რედაქტირებადია</div>
       </div>
       <div class="row">
         <button class="btn" id="btnReload" type="button">🔄 განახლება</button>
@@ -40,7 +67,20 @@
     <div class="body">
       <div class="kv">
         <label>კლიენტი *</label>
-        <select class="input" id="p_client"></select>
+        <div style="display:flex;gap:10px;align-items:center;width:100%">
+          <div class="combo" style="flex:1">
+            <input class="comboInput" id="p_client_search" placeholder="დაწერე: სახელი / გვარი / ტელეფონი / ბარათი...">
+            <div class="comboList" id="p_client_list"></div>
+          </div>
+          <button class="btn primary" id="btnOpenNewClient" type="button" title="ახალი კლიენტი">＋</button>
+        </div>
+
+        <label>არჩეული კლიენტი</label>
+        <input class="input" id="p_client_label" disabled value="—">
+        <input type="hidden" id="p_client_id">
+
+        <label>ოპერაციის თარიღი</label>
+        <input class="input" id="p_operation_date" type="datetime-local">
 
         <label>ტრენერი (აირჩიე)</label>
         <select class="input" id="p_trainer"></select>
@@ -55,7 +95,8 @@
         <input class="input" id="p_mem_amount" disabled>
 
         <label>სულ გადასახდელი</label>
-        <input class="input" id="p_total" disabled>
+        <!-- ✅ ითვლება ავტომატურად, მაგრამ იძლევა ხელით ჩასწორებას -->
+        <input class="input" id="p_total" inputmode="decimal" placeholder="სულ (₾)">
 
         <label>Fixed Start (თუ fixed)</label>
         <input class="input" id="p_fixed_start" type="date">
@@ -67,7 +108,7 @@
         <select class="input" id="p_method">
           <option value="cash">ქეში</option>
           <option value="card">ბარათი</option>
-          <option value="transfer">ტრანსფერი</option>
+          <option value="transfer">გადმორიცხვა</option>
         </select>
       </div>
 
@@ -76,7 +117,8 @@
       </div>
 
       <div class="hint">
-        შენიშვნა: თუ ტრენერს არ აირჩევ, ტრენერის თანხა იქნება 0₾.
+        შენიშვნა: თუ ტრენერს არ აირჩევ, ტრენერის თანხა იქნება 0₾. <br>
+        სულ თანხა ავტომატურად ითვლება, მაგრამ შეგიძლია ხელით ჩაასწორო.
       </div>
     </div>
   </div>
@@ -85,14 +127,14 @@
   <div class="card">
     <div class="head">
       <h2>გადახდების ისტორია</h2>
-      <div class="sub">აბონ(₾) + ტრენ(₾) = სულ(₾)</div>
+      <div class="sub">operation_date ჩანს ცხრილში • Edit/Delete</div>
     </div>
     <div class="body">
       <div class="tableWrap" style="max-height:520px; overflow:auto;">
         <table>
           <thead>
             <tr>
-              <th>თარიღი</th>
+              <th>ოპერაციის თარიღი</th>
               <th>კლიენტი</th>
               <th>ტრენერი</th>
               <th>აბონემენტი</th>
@@ -124,6 +166,9 @@
         <label>კლიენტი *</label>
         <select class="input" id="e_client"></select>
 
+        <label>ოპერაციის თარიღი</label>
+        <input class="input" id="e_operation_date" type="datetime-local">
+
         <label>ტრენერი</label>
         <select class="input" id="e_trainer"></select>
 
@@ -137,7 +182,8 @@
         <input class="input" id="e_mem_amount" disabled>
 
         <label>სულ გადასახდელი</label>
-        <input class="input" id="e_total" disabled>
+        <!-- ✅ edit-ზეც editable -->
+        <input class="input" id="e_total" inputmode="decimal" placeholder="სულ (₾)">
 
         <label>Fixed Start</label>
         <input class="input" id="e_fixed_start" type="date">
@@ -149,7 +195,7 @@
         <select class="input" id="e_method">
           <option value="cash">ქეში</option>
           <option value="card">ბარათი</option>
-          <option value="transfer">ტრანსფერი</option>
+          <option value="transfer">გადმორიცხვა</option>
         </select>
       </div>
 
@@ -157,8 +203,44 @@
         <button class="btn primary" id="btnSaveEdit" type="button">💾 შენახვა</button>
         <button class="btn" id="btnCancelEdit" type="button">გაუქმება</button>
       </div>
+    </div>
+  </div>
+</div>
 
-      <div class="hint">Edit-ში “სულ” ითვლება: membership price + trainer fee (ბექიც გადაამოწმებს).</div>
+<!-- New Client Modal -->
+<div class="modalOverlay" id="overlayNewClient">
+  <div class="modal" style="max-width:860px;">
+    <div class="mhead">
+      <strong>ახალი კლიენტი</strong>
+      <button class="closeX" id="cClose" type="button">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="kv">
+        <label>სახელი *</label>
+        <input class="input" id="c_first" placeholder="გიორგი">
+
+        <label>გვარი *</label>
+        <input class="input" id="c_last" placeholder="კაპანაძე">
+
+        <label>ტელეფონი *</label>
+        <input class="input" id="c_phone" placeholder="555123456">
+
+        <label>ელ. ფოსტა</label>
+        <input class="input" id="c_email" type="email" placeholder="name@mail.com">
+
+        <label>ორგანიზაცია</label>
+        <input class="input" id="c_org" placeholder="Company / Organization">
+
+        <label>ბარათის ნომერი</label>
+        <input class="input" id="c_card" placeholder="CARD-001">
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn primary" id="btnSaveClient" type="button">შენახვა</button>
+        <button class="btn" id="btnCancelClient" type="button">გაუქმება</button>
+      </div>
+
+      <div class="hint">შენახვის შემდეგ კლიენტი ავტომატურად აირჩევა გადახდაზე.</div>
     </div>
   </div>
 </div>
@@ -172,10 +254,32 @@
   let membershipsCache = [];
   let trainersCache = [];
   let paymentsCache = [];
-
   let editingId = null;
 
-  // ===== helpers
+  // ✅ override flags (auto-calc vs manual)
+  let pTotalOverridden = false;
+  let eTotalOverridden = false;
+
+  // ===== datetime helpers
+  function pad2(n){ return String(n).padStart(2,'0'); }
+  function toLocalInputValue(dateObj){
+    const d = dateObj;
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+  function isoToLocalInputValue(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return "";
+    return toLocalInputValue(d);
+  }
+  function localInputToISO(v){
+    if(!v) return null;
+    const d = new Date(v);
+    if(isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
+  // ===== money helpers
   function fmtMoney(v){
     const n = Number(v ?? 0);
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
@@ -183,6 +287,22 @@
   function fmtDT(iso){
     if(!iso) return "—";
     return String(iso).slice(0,19).replace("T"," ");
+  }
+
+  function parseNum(v){
+  if(v === null || v === undefined) return null;
+  const s = String(v).replace(",", ".").trim();
+  if(!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+  function parseNum(v){
+    if(v === null || v === undefined) return null;
+    const s = String(v).replace(",", ".").trim();
+    if(!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
   }
 
   function getOptPrice(selectId){
@@ -197,10 +317,94 @@
   function recalc(prefix){
     const mem = getOptPrice(prefix+"_membership");
     const fee = getOptFee(prefix+"_trainer");
-    $(prefix+"_mem_amount").value = `${fmtMoney(mem)}₾`;
-    $(prefix+"_trainer_fee").value = `${fmtMoney(fee)}₾`;
-    $(prefix+"_total").value = `${fmtMoney(mem + fee)}₾`;
+
+    $(prefix+"_mem_amount").value = `${fmtMoney(mem)}`;
+    $(prefix+"_trainer_fee").value = `${fmtMoney(fee)}`;
+
+    const autoTotal = mem + fee;
+    const overridden = (prefix === "p") ? pTotalOverridden : eTotalOverridden;
+
+    // ✅ თუ user-მა ხელით შეცვალა, აღარ გადავაწერთ
+    if(!overridden){
+      $(prefix+"_total").value = `${fmtMoney(autoTotal)}`;
+    }
   }
+
+  // total input listeners (manual override)
+  $("p_total").addEventListener("input", ()=>{
+    const n = parseNum($("p_total").value);
+    pTotalOverridden = (n !== null); // ცარიელი -> auto რეჟიმი
+    if(!pTotalOverridden){ recalc("p"); }
+  });
+  $("e_total").addEventListener("input", ()=>{
+    const n = parseNum($("e_total").value);
+    eTotalOverridden = (n !== null);
+    if(!eTotalOverridden){ recalc("e"); }
+  });
+
+  // ===== client searchable dropdown
+  const clientSearch = $("p_client_search");
+  const clientList = $("p_client_list");
+  const clientLabel = $("p_client_label");
+  const clientIdHidden = $("p_client_id");
+
+  function clientText(c){
+    const full = `${c.first_name||""} ${c.last_name||""}`.trim();
+    const phone = c.phone || "";
+    const card = c.card_number || "";
+    return `${full} • ${phone}${card ? " • "+card : ""}`;
+  }
+
+  function setSelectedClient(c){
+    clientIdHidden.value = c ? String(c.id) : "";
+    clientLabel.value = c ? clientText(c) : "—";
+    clientSearch.value = c ? clientText(c) : "";
+    hideClientList();
+  }
+
+  function showClientList(){ clientList.classList.add("show"); }
+  function hideClientList(){ clientList.classList.remove("show"); }
+
+  function renderClientList(filterText=""){
+    const q = (filterText||"").trim().toLowerCase();
+    const items = clientsCache.filter(c=>{
+      const full = `${c.first_name||""} ${c.last_name||""}`.toLowerCase();
+      const phone = String(c.phone||"");
+      const card = String(c.card_number||"").toLowerCase();
+      return !q || full.includes(q) || phone.includes(q) || card.includes(q);
+    }).slice(0, 60);
+
+    clientList.innerHTML = items.map(c=>`
+      <div class="comboItem" data-id="${c.id}">
+        <div>
+          <div style="font-weight:900">${(c.first_name||"")+" "+(c.last_name||"")}</div>
+          <div class="miniTag">${c.phone || "—"}${c.card_number ? " • "+c.card_number : ""}</div>
+        </div>
+        <div class="miniTag">ID: ${c.id}</div>
+      </div>
+    `).join("") || `<div class="comboItem"><div class="miniTag">ვერ მოიძებნა…</div></div>`;
+
+    clientList.querySelectorAll("[data-id]").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        const id = Number(el.dataset.id);
+        const c = clientsCache.find(x=>Number(x.id)===id);
+        if(c) setSelectedClient(c);
+      });
+    });
+  }
+
+  clientSearch.addEventListener("focus", ()=>{
+    renderClientList(clientSearch.value);
+    showClientList();
+  });
+  clientSearch.addEventListener("input", ()=>{
+    renderClientList(clientSearch.value);
+    showClientList();
+  });
+  document.addEventListener("click", (e)=>{
+    const wrap = clientSearch.closest(".combo");
+    if(!wrap.contains(e.target)) hideClientList();
+  });
 
   // ===== load data
   async function loadClients(){
@@ -208,12 +412,13 @@
     if(!res.ok){ toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა"); return; }
     clientsCache = await res.json();
 
-    const options = clientsCache.map(c =>
+    $("e_client").innerHTML = clientsCache.map(c =>
       `<option value="${c.id}">${c.first_name} ${c.last_name} (${c.phone})</option>`
     ).join("");
 
-    $("p_client").innerHTML = options;
-    $("e_client").innerHTML = options;
+    if(clientsCache.length && !clientIdHidden.value){
+      setSelectedClient(clientsCache[0]);
+    }
   }
 
   async function loadTrainers(){
@@ -225,7 +430,7 @@
       `<option value="">— ტრენერის გარეშე —</option>` +
       trainersCache.map(t => `
         <option value="${t.id}" data-fee="${t.fee}">
-          ${t.first_name} ${t.last_name} • ${fmtMoney(t.fee)}₾
+          ${t.first_name} ${t.last_name} • ${fmtMoney(t.fee)}
         </option>
       `).join("");
 
@@ -242,7 +447,7 @@
       `<option value="">— აბონემენტის გარეშე —</option>` +
       membershipsCache.map(m =>
         `<option value="${m.id}" data-price="${m.price}">
-          ${m.name} • ${m.membership_type} • ${fmtMoney(m.price)}₾
+          ${m.name} • ${m.membership_type} • ${fmtMoney(m.price)}
         </option>`
       ).join("");
 
@@ -250,22 +455,22 @@
     $("e_membership").innerHTML = opts;
   }
 
-  // ===== history render
   function renderPayments(items){
     paymentsCache = Array.isArray(items) ? items.slice() : [];
     const tb = $("tbody");
     tb.innerHTML = "";
 
     paymentsCache.forEach(p=>{
+      const opdt = p.operation_date || p.created_at;
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${fmtDT(p.created_at)}</td>
+        <td>${fmtDT(opdt)}</td>
         <td>${p.client_name || "—"}</td>
         <td>${p.trainer_name || "—"}</td>
         <td>${p.membership_name || "—"}</td>
-        <td>${fmtMoney(p.membership_amount)}₾</td>
-        <td>${fmtMoney(p.trainer_fee)}₾</td>
-        <td style="font-weight:900">${fmtMoney(p.amount)}₾</td>
+        <td>${fmtMoney(p.membership_amount)}</td>
+        <td>${fmtMoney(p.trainer_fee)}</td>
+        <td style="font-weight:900">${fmtMoney(p.amount)}</td>
         <td>${p.method || "—"}</td>
         <td>
           <div class="tdActions">
@@ -292,12 +497,16 @@
     renderPayments(data);
   }
 
+  function setDefaultOperationDates(){
+    $("p_operation_date").value = toLocalInputValue(new Date());
+  }
+
   // ===== create payment
   $("p_membership").addEventListener("change", ()=>recalc("p"));
   $("p_trainer").addEventListener("change", ()=>recalc("p"));
 
   $("btnPay").addEventListener("click", async ()=>{
-    const client = $("p_client").value;
+    const client = clientIdHidden.value;
     const membership = $("p_membership").value || null;
     const trainer = $("p_trainer").value || null;
     const method = $("p_method").value;
@@ -307,6 +516,8 @@
       return;
     }
 
+    const totalOverride = parseNum($("p_total").value);
+
     const payload = {
       client: Number(client),
       membership: membership ? Number(membership) : null,
@@ -314,6 +525,9 @@
       method: method,
       fixed_start: $("p_fixed_start").value || null,
       fixed_end: $("p_fixed_end").value || null,
+      operation_date: localInputToISO($("p_operation_date").value),
+      // ✅ თუ user-მა ჩასწორა, გავგზავნით override-ს, თუ არა -> null
+      total_amount: (pTotalOverridden && totalOverride !== null) ? totalOverride : null
     };
 
     const res = await fetch("/api/payments/", {
@@ -326,15 +540,23 @@
     try{ data = await res.json(); }catch(e){}
 
     if(!res.ok){
+      console.log("STATUS", res.status);
+      console.log("RESP", data);
       toast("bad","ვერ შესრულდა", data.detail || JSON.stringify(data));
       return;
     }
 
     toast("ok","OK",`შენახულია ✅ სულ: ${fmtMoney(data.amount)}₾`);
+
     $("p_fixed_start").value = "";
     $("p_fixed_end").value = "";
     $("p_membership").value = "";
     $("p_trainer").value = "";
+
+    // ✅ reset override
+    pTotalOverridden = false;
+
+    setDefaultOperationDates();
     recalc("p");
     await loadPayments();
   });
@@ -356,14 +578,23 @@
     $("e_fixed_start").value = p.fixed_start || "";
     $("e_fixed_end").value = p.fixed_end || "";
     $("e_method").value = p.method || "cash";
+    $("e_operation_date").value = isoToLocalInputValue(p.operation_date || p.created_at);
 
+    // ჯერ გამოთვალე ავტომატური breakdown
+    eTotalOverridden = false;
     recalc("e");
+
+    // მერე დააყენე შენახული total და ჩათვალე override-ად (რომ recalc-მა აღარ გადაფაროს)
+    $("e_total").value = fmtMoney(p.amount);
+    eTotalOverridden = true;
+
     overlayEdit.classList.add("show");
   }
 
   function closeEdit(){
     overlayEdit.classList.remove("show");
     editingId = null;
+    eTotalOverridden = false;
   }
 
   $("eClose").addEventListener("click", closeEdit);
@@ -373,46 +604,50 @@
   $("e_membership").addEventListener("change", ()=>recalc("e"));
   $("e_trainer").addEventListener("change", ()=>recalc("e"));
 
-  $("btnSaveEdit").addEventListener("click", async ()=>{
-    if(!editingId){ return; }
+$("btnSaveEdit").addEventListener("click", async ()=>{
+  if(!editingId){ return; }
 
-    const client = $("e_client").value;
-    const membership = $("e_membership").value || null;
-    const trainer = $("e_trainer").value || null;
-    const method = $("e_method").value;
+  const client = $("e_client").value;
+  const membership = $("e_membership").value || null;
+  const trainer = $("e_trainer").value || null;
+  const method = $("e_method").value;
 
-    if(!client || !method){
-      toast("bad","შეცდომა","შეავსე: კლიენტი და მეთოდი");
-      return;
-    }
+  if(!client || !method){
+    toast("bad","შეცდომა","შეავსე: კლიენტი და მეთოდი");
+    return;
+  }
 
-    const payload = {
-      client: Number(client),
-      membership: membership ? Number(membership) : null,
-      trainer: trainer ? Number(trainer) : null,
-      method: method,
-      fixed_start: $("e_fixed_start").value || null,
-      fixed_end: $("e_fixed_end").value || null,
-    };
+  const totalOverride = parseNum($("e_total").value);
 
-    const res = await fetch(`/api/payments/${editingId}/`, {
-      method:"PUT",
-      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
-      body: JSON.stringify(payload)
-    });
+  const payload = {
+    client: Number(client),
+    membership: membership ? Number(membership) : null,
+    trainer: trainer ? Number(trainer) : null,
+    method: method,
+    fixed_start: $("e_fixed_start").value || null,
+    fixed_end: $("e_fixed_end").value || null,
+    operation_date: localInputToISO($("e_operation_date").value),
+    total_amount: (eTotalOverridden && totalOverride !== null) ? totalOverride : null
+  };
 
-    let data = {};
-    try{ data = await res.json(); }catch(e){}
-
-    if(!res.ok){
-      toast("bad","ვერ შეინახა", data.detail || JSON.stringify(data));
-      return;
-    }
-
-    toast("ok","OK",`განახლდა ✅ სულ: ${fmtMoney(data.amount)}₾`);
-    closeEdit();
-    await loadPayments();
+  const res = await fetch(`/api/payments/${editingId}/`, {
+    method:"PATCH",
+    headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+    body: JSON.stringify(payload)
   });
+
+  let data = {};
+  try{ data = await res.json(); }catch(e){}
+
+  if(!res.ok){
+    toast("bad","ვერ შეინახა", data.detail || JSON.stringify(data));
+    return;
+  }
+
+  toast("ok","OK",`განახლდა ✅ სულ: ${fmtMoney(data.amount)}₾`);
+  closeEdit();
+  await loadPayments();
+});
 
   // ===== delete
   async function deletePayment(id){
@@ -437,12 +672,67 @@
     await loadPayments();
   }
 
+  // ===== new client modal
+  const overlayNewClient = $("overlayNewClient");
+  function openNewClient(){ overlayNewClient.classList.add("show"); }
+  function closeNewClient(){ overlayNewClient.classList.remove("show"); }
+
+  $("btnOpenNewClient").addEventListener("click", openNewClient);
+  $("cClose").addEventListener("click", closeNewClient);
+  $("btnCancelClient").addEventListener("click", closeNewClient);
+  overlayNewClient.addEventListener("click", (e)=>{ if(e.target===overlayNewClient) closeNewClient(); });
+
+  $("btnSaveClient").addEventListener("click", async ()=>{
+    const first_name = $("c_first").value.trim();
+    const last_name = $("c_last").value.trim();
+    const phone = $("c_phone").value.trim();
+    if(!first_name || !last_name || !phone){
+      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, ტელეფონი");
+      return;
+    }
+
+    const payload = {
+      first_name, last_name, phone,
+      email: $("c_email").value.trim() || "",
+      organization: $("c_org").value.trim() || "",
+      card_number: $("c_card").value.trim() || ""
+    };
+
+    const res = await fetch("/api/clients/", {
+      method:"POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      body: JSON.stringify(payload)
+    });
+
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok){
+      toast("bad","ვერ შეინახა", data.detail || JSON.stringify(data));
+      return;
+    }
+
+    toast("ok","OK","კლიენტი დაემატა ✅");
+    closeNewClient();
+
+    ["c_first","c_last","c_phone","c_email","c_org","c_card"].forEach(id=>$(id).value="");
+
+    await loadClients();
+    const created = clientsCache.find(x => Number(x.id) === Number(data.id)) || data;
+    if(created && created.id) setSelectedClient(created);
+
+    renderClientList(clientSearch.value);
+  });
+
   // ===== reload
   $("btnReload").addEventListener("click", async ()=>{
     await loadClients();
     await loadTrainers();
     await loadMemberships();
     await loadPayments();
+    setDefaultOperationDates();
+
+    pTotalOverridden = false;
     recalc("p");
     toast("ok","OK","განახლდა");
   });
@@ -453,6 +743,8 @@
     await loadTrainers();
     await loadMemberships();
     await loadPayments();
+    setDefaultOperationDates();
+    pTotalOverridden = false;
     recalc("p");
   })();
 </script>

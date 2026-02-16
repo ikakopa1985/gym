@@ -2,6 +2,7 @@ from django.db import models
 from django.utils.timezone import now
 from django.db.models import Q
 from datetime import timedelta
+from django.utils import timezone
 
 
 class Trainer(models.Model):
@@ -46,7 +47,7 @@ class ClientMembership(models.Model):
 
     client = models.ForeignKey(
         "Client",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="memberships",
         verbose_name="კლიენტი",
     )
@@ -119,6 +120,8 @@ class Client(models.Model):
 
     photo = models.ImageField("ფოტოსურათი", upload_to="clients/photos/", null=True, blank=True)
 
+    comment = models.TextField("კომენტარი", blank=True, default="")  # ✅ დაამატე
+
     # --- აბონემენტის ველები (რაც უკვე გვქონდა)
     # trainer = models.ForeignKey(
     #     "Trainer", on_delete=models.SET_NULL, null=True, blank=True,
@@ -147,19 +150,26 @@ class Payment(models.Model):
     PAYMENT_METHODS = (
         ("cash", "ქეში"),
         ("card", "ბარათი"),
-        ("transfer", "ტრანსფერი"),
+        ("transfer", "გადმორიცხვა"),
+    )
+
+    operation_date = models.DateTimeField(
+        "ოპერაციის თარიღი",
+        null=True, blank=True,
+        default=timezone.now,
+        db_index=True
     )
 
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="payments", verbose_name="კლიენტი")
 
     membership = models.ForeignKey(
-        Membership, on_delete=models.SET_NULL,
+        Membership, on_delete=models.PROTECT,
         null=True, blank=True,
         related_name="payments", verbose_name="აბონემენტი"
     )
 
     trainer = models.ForeignKey(
-        Trainer, on_delete=models.SET_NULL,
+        Trainer, on_delete=models.PROTECT,
         null=True, blank=True,
         related_name="payments", verbose_name="ტრენერი"
     )
@@ -182,7 +192,7 @@ class Payment(models.Model):
 
 class CheckIn(models.Model):
     client = models.ForeignKey(
-        Client, on_delete=models.CASCADE,
+        Client, on_delete=models.PROTECT,
         related_name="checkins", verbose_name="კლიენტი"
     )
     created_at = models.DateTimeField("შესვლის დრო", auto_now_add=True)

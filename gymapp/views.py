@@ -1,23 +1,24 @@
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from django.utils.timezone import now
-from django.db.models import Sum, Count
+from django.db.models import Sum
+from django.utils import timezone
 
-from rest_framework import serializers, viewsets, status, mixins
+from rest_framework import serializers, viewsets, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from .models import *
+from django.utils.dateparse import parse_datetime
+
+from .models import Trainer, Membership, Client, ClientMembership, Payment, CheckIn
 
 
 # =========================
-# HTML View (index.html)
+# HTML Views
 # =========================
-
 @login_required
 def index(request):
     return render(request, "index.html")
@@ -46,17 +47,14 @@ def checkins_page(request):
 def reports_page(request):
     return render(request, "reports.html")
 
+
 # =========================
 # Serializers
 # =========================
-from rest_framework import serializers
-from .models import Trainer, Membership, Client, ClientMembership, Payment, CheckIn
-
-
 class TrainerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trainer
-        fields = ["id", "first_name", "last_name", "phone", "specialization","fee"]
+        fields = ["id", "first_name", "last_name", "phone", "specialization", "fee"]
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -88,6 +86,7 @@ class ClientSerializer(serializers.ModelSerializer):
             "birth_date", "gender",
             "phone", "email", "organization",
             "card_number", "photo",
+            "comment",
             "active_membership_id", "is_active",
             "created_at",
         ]
@@ -131,25 +130,6 @@ class ClientMembershipSerializer(serializers.ModelSerializer):
     def get_is_active(self, obj):
         return obj.is_active()
 
-    def validate(self, attrs):
-        membership = attrs.get("membership", getattr(self.instance, "membership", None))
-        start = attrs.get("start_date", getattr(self.instance, "start_date", None))
-        end = attrs.get("end_date", getattr(self.instance, "end_date", None))
-        remaining = attrs.get("remaining_visits", getattr(self.instance, "remaining_visits", None))
-
-        mtype = membership.membership_type if membership else None
-
-        if not start:
-            raise serializers.ValidationError({"start_date": "start_date აუცილებელია"})
-
-        if mtype == "fixed" and not end:
-            raise serializers.ValidationError({"end_date": "fixed ტიპისთვის end_date აუცილებელია"})
-
-        if mtype == "limited" and (remaining is None):
-            raise serializers.ValidationError({"remaining_visits": "limited ტიპისთვის remaining_visits აუცილებელია"})
-
-        return attrs
-
 
 class PaymentSerializer(serializers.ModelSerializer):
     client_name = serializers.SerializerMethodField(read_only=True)
@@ -160,6 +140,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = [
             "id",
+            "operation_date",
             "client", "client_name",
             "membership", "membership_name",
             "trainer", "trainer_name",
@@ -168,7 +149,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             "amount", "method",
             "created_at",
         ]
-        read_only_fields = ["membership_amount", "trainer_fee", "amount"]
+        read_only_fields = ["membership_amount", "trainer_fee"]
 
     def get_client_name(self, obj):
         return str(obj.client)
@@ -178,7 +159,6 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_trainer_name(self, obj):
         return str(obj.trainer) if obj.trainer else None
-
 
 
 class CheckInSerializer(serializers.ModelSerializer):
@@ -193,49 +173,8 @@ class CheckInSerializer(serializers.ModelSerializer):
 
 
 # =========================
-# Helpers
-# =========================
-
-def assign_membership_to_client(client: Client, membership: Membership):
-    client.active_membership = membership
-    client.membership_start = now().date()
-
-    if membership.membership_type == "unlimited":
-        days = membership.duration_days or 30
-        client.membership_end = now().date() + timedelta(days=days)
-        client.remaining_visits = None
-    else:
-        client.remaining_visits = membership.visit_count or 0
-        client.membership_end = None
-
-    client.save()
-
-
-def parse_date_or_none(s: str):
-    if not s:
-        return None
-    try:
-        y, m, d = s.split("-")
-        return date(int(y), int(m), int(d))
-    except Exception:
-        return None
-
-
-# =========================
 # ViewSets
 # =========================
-from datetime import timedelta
-from django.utils.timezone import now
-from django.db.models import Q, Sum
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.filters import SearchFilter, OrderingFilter
-
-from .models import *
-
-
-
 class TrainerViewSet(viewsets.ModelViewSet):
     queryset = Trainer.objects.all().order_by("-id")
     serializer_class = TrainerSerializer
@@ -274,13 +213,172 @@ class ClientMembershipViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "created_at", "start_date", "end_date"]
 
 
-from decimal import Decimal
-from datetime import timedelta
-from django.utils.timezone import now
-from rest_framework import status
-from rest_framework.response import Response
+# =========================
+# Reports (✅ ერთიანი, breakdown-ით)
+# =========================
+class ReportsViewSet(viewsets.ViewSet):
+
+    def _parse_date(self, s):
+        if not s:
+            return None
+        try:
+            y, m, d = str(s).split("-")
+            return timezone.datetime(int(y), int(m), int(d)).date()
+        except Exception:
+            return None
+
+    @action(detail=False, methods=["get"])
+    def payments(self, request):
+        """
+        GET /api/reports/payments/?
+
+        Filters (multi-choice):
+          date_from=YYYY-MM-DD
+          date_to=YYYY-MM-DD
+          trainer=1&trainer=2&trainer=null   (null -> trainer is null)
+          method=cash&method=card&method=transfer
+          membership=3&membership=4&membership=null   (null -> membership is null)
+          client=12&client=15
+          q=search text (name/phone/card)
+          min_amount=...
+          max_amount=...
+
+        Returns:
+          - stats: totals + by_trainer + without_trainer
+          - rows: payment rows (for table)
+          - clients: distinct client list (for “დაწვრილებით”)
+        """
+
+        qs = Payment.objects.select_related("client", "membership", "trainer").all()
+
+        # ---- date range (operation_date)
+        dfrom = self._parse_date(request.query_params.get("date_from"))
+        dto = self._parse_date(request.query_params.get("date_to"))
+        if dfrom:
+            qs = qs.filter(operation_date__date__gte=dfrom)
+        if dto:
+            qs = qs.filter(operation_date__date__lte=dto)
+
+        # ---- multi filters
+        trainer_vals = request.query_params.getlist("trainer")
+        if trainer_vals:
+            q_tr = Q()
+            for v in trainer_vals:
+                if str(v).lower() == "null":
+                    q_tr |= Q(trainer__isnull=True)
+                else:
+                    q_tr |= Q(trainer_id=int(v))
+            qs = qs.filter(q_tr)
+
+        method_vals = request.query_params.getlist("method")
+        if method_vals:
+            qs = qs.filter(method__in=method_vals)
+
+        membership_vals = request.query_params.getlist("membership")
+        if membership_vals:
+            q_m = Q()
+            for v in membership_vals:
+                if str(v).lower() == "null":
+                    q_m |= Q(membership__isnull=True)
+                else:
+                    q_m |= Q(membership_id=int(v))
+            qs = qs.filter(q_m)
+
+        client_vals = request.query_params.getlist("client")
+        if client_vals:
+            qs = qs.filter(client_id__in=[int(x) for x in client_vals])
+
+        # ---- free text search
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(client__first_name__icontains=q) |
+                Q(client__last_name__icontains=q) |
+                Q(client__phone__icontains=q) |
+                Q(client__card_number__icontains=q)
+            )
+
+        # ---- amount range
+        min_amount = request.query_params.get("min_amount")
+        max_amount = request.query_params.get("max_amount")
+        try:
+            if min_amount not in (None, ""):
+                qs = qs.filter(amount__gte=min_amount)
+            if max_amount not in (None, ""):
+                qs = qs.filter(amount__lte=max_amount)
+        except Exception:
+            pass
+
+        # =========================
+        # STATS
+        # =========================
+
+        # "აბონემენტი გაიყიდა" -> Payment სადაც membership != null
+        membership_sold_qs = qs.filter(membership__isnull=False)
+
+        stats = {}
+        stats["payments_count"] = qs.count()
+        stats["total_amount"] = float(qs.aggregate(s=Sum("amount"))["s"] or 0)
+
+        stats["memberships_sold_count"] = membership_sold_qs.count()
+        stats["memberships_sold_amount"] = float(membership_sold_qs.aggregate(s=Sum("amount"))["s"] or 0)
+
+        # by trainer (only membership sold)
+        by_trainer = (
+            membership_sold_qs
+            .values("trainer_id", "trainer__first_name", "trainer__last_name")
+            .annotate(cnt=Count("id"), total=Sum("amount"))
+            .order_by("-cnt")
+        )
+        # normalize trainer label
+        stats["by_trainer"] = [
+            {
+                "trainer_id": r["trainer_id"],
+                "trainer_name": (f'{r["trainer__first_name"] or ""} {r["trainer__last_name"] or ""}').strip() if r["trainer_id"] else "უტრენერო",
+                "count": int(r["cnt"] or 0),
+                "total": float(r["total"] or 0),
+                "is_without_trainer": (r["trainer_id"] is None),
+            }
+            for r in by_trainer
+        ]
+
+        # without trainer (membership sold only)
+        wt = membership_sold_qs.filter(trainer__isnull=True)
+        stats["without_trainer_count"] = wt.count()
+        stats["without_trainer_total"] = float(wt.aggregate(s=Sum("amount"))["s"] or 0)
+
+        # =========================
+        # ROWS (table)
+        # =========================
+        rows = PaymentSerializer(qs.order_by("-operation_date", "-id")[:2000], many=True).data
+
+        # =========================
+        # DISTINCT CLIENTS (details list)
+        # =========================
+        client_ids = list(qs.values_list("client_id", flat=True).distinct())
+        clients = ClientSerializer(Client.objects.filter(id__in=client_ids).order_by("last_name","first_name"), many=True).data
+
+        return Response({
+            "filters": {
+                "date_from": str(dfrom) if dfrom else None,
+                "date_to": str(dto) if dto else None,
+                "trainer": trainer_vals,
+                "method": method_vals,
+                "membership": membership_vals,
+                "client": client_vals,
+                "q": q,
+                "min_amount": min_amount,
+                "max_amount": max_amount,
+            },
+            "stats": stats,
+            "rows": rows,
+            "clients": clients,
+        })
 
 
+# =========================
+# Payments (create + patch override)
+# =========================
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related("client", "membership", "trainer").all().order_by("-id")
     serializer_class = PaymentSerializer
@@ -294,53 +392,70 @@ class PaymentViewSet(viewsets.ModelViewSet):
         except Exception:
             return None
 
+    def _parse_dt_or_none(self, s):
+        if not s:
+            return None
+        dt = parse_datetime(str(s))
+        if not dt:
+            return None
+        if timezone.is_naive(dt):
+            dt = timezone.make_aware(dt, timezone.get_current_timezone())
+        return dt
+
+    def _parse_decimal_or_none(self, v):
+        if v in (None, "", "null"):
+            return None
+        try:
+            return Decimal(str(v))
+        except Exception:
+            return None
+
     def create(self, request, *args, **kwargs):
         client_id = request.data.get("client")
         membership_id = request.data.get("membership")
-        trainer_id = request.data.get("trainer")  # optional
+        trainer_id = request.data.get("trainer")
         method = request.data.get("method")
 
         fixed_start = self._parse_date_or_none(request.data.get("fixed_start"))
         fixed_end = self._parse_date_or_none(request.data.get("fixed_end"))
+        operation_date = self._parse_dt_or_none(request.data.get("operation_date")) or timezone.now()
+
+        total_override = self._parse_decimal_or_none(request.data.get("total_amount"))
+        if request.data.get("total_amount") not in (None, "", "null") and total_override is None:
+            return Response({"detail": "total_amount არასწორია"}, status=400)
 
         if not client_id or not method:
             return Response({"detail": "client და method აუცილებელია"}, status=400)
 
-        # --- client
         try:
             client = Client.objects.get(id=client_id)
         except Client.DoesNotExist:
             return Response({"detail": "client ვერ მოიძებნა"}, status=404)
 
-        # --- membership (optional)
         membership = None
-        if membership_id:
+        if membership_id not in (None, "", "null"):
             try:
                 membership = Membership.objects.get(id=membership_id)
             except Membership.DoesNotExist:
                 return Response({"detail": "membership ვერ მოიძებნა"}, status=404)
 
-        # --- trainer (optional)  ✅ აქ აღარ არის client.trainer
         trainer = None
-        if trainer_id:
+        if trainer_id not in (None, "", "null"):
             try:
                 trainer = Trainer.objects.get(id=trainer_id)
             except Trainer.DoesNotExist:
                 return Response({"detail": "trainer ვერ მოიძებნა"}, status=404)
 
-        # --- fixed validation BEFORE creating payment
         if membership and membership.membership_type == "fixed":
             if not fixed_start or not fixed_end:
                 return Response({"detail": "fixed ტიპზე აუცილებელია fixed_start და fixed_end"}, status=400)
             if fixed_end < fixed_start:
                 return Response({"detail": "fixed_end არ შეიძლება იყოს fixed_start-ზე ადრე"}, status=400)
 
-        # --- amounts
         membership_amount = Decimal(str(membership.price)) if membership else Decimal("0")
         trainer_fee = Decimal(str(trainer.fee)) if trainer else Decimal("0")
-        total_amount = membership_amount + trainer_fee
+        total_amount = total_override if total_override is not None else (membership_amount + trainer_fee)
 
-        # --- create payment
         payment = Payment.objects.create(
             client=client,
             membership=membership,
@@ -351,11 +466,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
             trainer_fee=trainer_fee,
             amount=total_amount,
             method=method,
+            operation_date=operation_date,
         )
 
-        # --- create ClientMembership if membership exists
+        # ClientMembership create
         if membership:
-            today = now().date()
+            today = timezone.localdate()
             start_date = today
             end_date = None
             remaining_visits = None
@@ -373,12 +489,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 remaining_visits = int(membership.visit_count)
 
             elif membership.membership_type == "fixed":
-                # fixed_start/fixed_end უკვე ვალიდირებულია ზემოთ
                 start_date = fixed_start
                 end_date = fixed_end
-
-            # სურვილისამებრ: ძველი აქტიურების "expired" გაკეთება (თუ გინდა ერთდროულად ერთი აქტიური)
-            # ClientMembership.objects.filter(client=client, status="active").update(status="expired")
 
             ClientMembership.objects.create(
                 client=client,
@@ -391,6 +503,64 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
+    def partial_update(self, request, *args, **kwargs):
+        payment = self.get_object()
+
+        client_id = request.data.get("client", payment.client_id)
+        membership_id = request.data.get("membership", payment.membership_id)
+        trainer_id = request.data.get("trainer", payment.trainer_id)
+        method = request.data.get("method", payment.method)
+
+        fixed_start = self._parse_date_or_none(request.data.get("fixed_start")) if "fixed_start" in request.data else payment.fixed_start
+        fixed_end = self._parse_date_or_none(request.data.get("fixed_end")) if "fixed_end" in request.data else payment.fixed_end
+        operation_date = self._parse_dt_or_none(request.data.get("operation_date")) if "operation_date" in request.data else payment.operation_date
+
+        total_override = self._parse_decimal_or_none(request.data.get("total_amount"))
+        if request.data.get("total_amount") not in (None, "", "null") and total_override is None:
+            return Response({"detail": "total_amount არასწორია"}, status=400)
+
+        try:
+            client = Client.objects.get(id=client_id)
+        except Client.DoesNotExist:
+            return Response({"detail": "client ვერ მოიძებნა"}, status=404)
+
+        membership = None
+        if membership_id not in (None, "", "null"):
+            try:
+                membership = Membership.objects.get(id=membership_id)
+            except Membership.DoesNotExist:
+                return Response({"detail": "membership ვერ მოიძებნა"}, status=404)
+
+        trainer = None
+        if trainer_id not in (None, "", "null"):
+            try:
+                trainer = Trainer.objects.get(id=trainer_id)
+            except Trainer.DoesNotExist:
+                return Response({"detail": "trainer ვერ მოიძებნა"}, status=404)
+
+        if membership and membership.membership_type == "fixed":
+            if not fixed_start or not fixed_end:
+                return Response({"detail": "fixed ტიპზე აუცილებელია fixed_start და fixed_end"}, status=400)
+            if fixed_end < fixed_start:
+                return Response({"detail": "fixed_end არ შეიძლება იყოს fixed_start-ზე ადრე"}, status=400)
+
+        membership_amount = Decimal(str(membership.price)) if membership else Decimal("0")
+        trainer_fee = Decimal(str(trainer.fee)) if trainer else Decimal("0")
+        amount = total_override if total_override is not None else (membership_amount + trainer_fee)
+
+        payment.client = client
+        payment.membership = membership
+        payment.trainer = trainer
+        payment.fixed_start = fixed_start
+        payment.fixed_end = fixed_end
+        payment.method = method
+        payment.operation_date = operation_date or timezone.now()
+        payment.membership_amount = membership_amount
+        payment.trainer_fee = trainer_fee
+        payment.amount = amount
+        payment.save()
+
+        return Response(PaymentSerializer(payment).data, status=200)
 
 
 class CheckInViewSet(viewsets.ModelViewSet):
@@ -401,12 +571,6 @@ class CheckInViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "created_at"]
 
     def create(self, request, *args, **kwargs):
-        """
-        Check-in:
-        - ამოწმებს client.active_membership
-        - თუ არ არის აქტიური -> 403
-        - limited -> remaining_visits - 1
-        """
         client_id = request.data.get("client")
         if not client_id:
             return Response({"detail": "client აუცილებელია"}, status=400)
@@ -420,7 +584,6 @@ class CheckInViewSet(viewsets.ModelViewSet):
         if not cm or not cm.is_active():
             return Response({"detail": "აბონემენტი ვადაგასულია ან არ აქვს აქტიური"}, status=403)
 
-        # limited -> ვიზიტი -1
         if cm.membership.membership_type == "limited":
             cm.remaining_visits = max((cm.remaining_visits or 0) - 1, 0)
             if cm.remaining_visits == 0:
@@ -432,11 +595,6 @@ class CheckInViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"])
     def quick(self, request):
-        """
-        სწრაფი Check-in ბარათის ნომრით ან ტელეფონით:
-        POST /api/checkins/quick/
-        body: { "card_number": "..."} or { "phone": "..." }
-        """
         card = (request.data.get("card_number") or "").strip()
         phone = (request.data.get("phone") or "").strip()
 
@@ -444,10 +602,7 @@ class CheckInViewSet(viewsets.ModelViewSet):
             return Response({"detail": "მიუთითე card_number ან phone"}, status=400)
 
         qs = Client.objects.all()
-        if card:
-            qs = qs.filter(card_number=card)
-        else:
-            qs = qs.filter(phone=phone)
+        qs = qs.filter(card_number=card) if card else qs.filter(phone=phone)
 
         client = qs.first()
         if not client:
@@ -469,39 +624,3 @@ class CheckInViewSet(viewsets.ModelViewSet):
             "client": ClientSerializer(client).data,
             "client_membership": ClientMembershipSerializer(cm).data,
         }, status=201)
-
-
-class ReportsViewSet(viewsets.ViewSet):
-    @action(detail=False, methods=["get"])
-    def summary(self, request):
-        """
-        GET /api/reports/summary/
-        """
-        today = now().date()
-        month_start = today.replace(day=1)
-
-        # შემოსავლები
-        today_income = Payment.objects.filter(created_at__date=today).aggregate(s=Sum("amount"))["s"] or 0
-        month_income = Payment.objects.filter(created_at__date__gte=month_start).aggregate(s=Sum("amount"))["s"] or 0
-
-        # აქტიურ/ვადაგასულ კლიენტებს დათვლით “აქტიური აბონემენტით”
-        cms = ClientMembership.objects.select_related("membership").filter(status="active")
-
-        active_count = 0
-        expired_count = 0
-        for cm in cms:
-            if cm.is_active():
-                active_count += 1
-            else:
-                expired_count += 1
-
-        today_checkins = CheckIn.objects.filter(created_at__date=today).count()
-
-        return Response({
-            "today": str(today),
-            "today_income": float(today_income),
-            "month_income": float(month_income),
-            "today_checkins": today_checkins,
-            "active_memberships": active_count,
-            "expired_memberships": expired_count,
-        })

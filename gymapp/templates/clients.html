@@ -150,6 +150,8 @@
 
         <label>ფოტოსურათი</label>
         <input class="input" id="c_photo" type="file" accept="image/*">
+        <label>კომენტარი</label>
+        <textarea class="input" id="c_comment" rows="3" placeholder="შენიშვნა კლიენტზე..."></textarea>
       </div>
 
       <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
@@ -227,7 +229,7 @@
   }
 
   function clearForm(){
-    ["c_first","c_last","c_phone","c_email","c_org","c_card"].forEach(id=>$(id).value="");
+    ["c_first","c_last","c_phone","c_email","c_org","c_card","c_comment"].forEach(id=>$(id).value="");
     $("c_birth").value="";
     $("c_gender").value="";
     $("c_photo").value="";
@@ -242,6 +244,7 @@
     $("c_card").value  = c.card_number || "";
     $("c_birth").value = c.birth_date || "";
     $("c_gender").value = c.gender || "";
+    $("c_comment").value = c.comment || "";   // ✅
     $("c_photo").value = "";
   }
 
@@ -433,6 +436,7 @@
     const org = $("c_org").value.trim();
     const card = $("c_card").value.trim();
     const photo = $("c_photo").files[0];
+    const comment = $("c_comment").value.trim();
 
     if(birth) fd.append("birth_date", birth);
     if(gender) fd.append("gender", gender);
@@ -440,6 +444,8 @@
     if(org) fd.append("organization", org);
     if(card) fd.append("card_number", card);
     if(photo) fd.append("photo", photo);
+    if(comment) fd.append("comment", comment);
+    else fd.append("comment", ""); // სურვილისამებრ, რომ ცარიელი წაშლაც იმუშაოს
 
     const url = editId ? `/api/clients/${editId}/` : "/api/clients/";
     const methodHttp = editId ? "PATCH" : "POST";

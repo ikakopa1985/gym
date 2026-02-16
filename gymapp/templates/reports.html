@@ -298,6 +298,55 @@
     return { total, memSum, trSum, count: payments.length, topT, topM };
   }
 
+
+  function buildQS(){
+  const params = new URLSearchParams();
+  if($("date_from").value) params.append("date_from", $("date_from").value);
+  if($("date_to").value) params.append("date_to", $("date_to").value);
+
+  // multi select trainers
+  Array.from($("trainer").selectedOptions).forEach(o=>{
+    params.append("trainer", o.value); // value შეიძლება იყოს "null" ან "12"
+  });
+
+  // multi methods
+  document.querySelectorAll("input[name='method']:checked").forEach(ch=>{
+    params.append("method", ch.value);
+  });
+
+  // memberships multi
+  Array.from($("membership").selectedOptions).forEach(o=>{
+    params.append("membership", o.value);
+  });
+
+  const q = ($("q").value||"").trim();
+  if(q) params.append("q", q);
+
+  return params.toString();
+}
+
+async function loadReport(){
+  const qs = buildQS();
+  const res = await fetch(`/api/reports/payments/?${qs}`);
+  const data = await res.json();
+
+  // stats
+  $("soldCount").textContent = data.stats.memberships_sold_count;
+  $("soldTotal").textContent = Number(data.stats.memberships_sold_amount||0).toFixed(2)+"₾";
+  $("wtCount").textContent = data.stats.without_trainer_count;
+  $("wtTotal").textContent = Number(data.stats.without_trainer_total||0).toFixed(2)+"₾";
+
+  // by trainer table
+  renderByTrainer(data.stats.by_trainer);
+
+  // main payments table
+  renderRows(data.rows);
+
+  // details list
+  window._reportClients = data.clients;
+}
+
+
   async function loadClientsActiveInfo(){
     // optional: თუ ClientSerializer აბრუნებს is_active, გამოვითვლით აქტიურს/ვადაგასულს
     try{
