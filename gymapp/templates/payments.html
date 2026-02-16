@@ -19,18 +19,6 @@
 
   .muted{color:var(--muted)}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-
-  /* Details modal table */
-  .modalTableWrap{
-    margin-top:12px;
-    border:1px solid var(--line);
-    border-radius:14px;
-    overflow:hidden;
-    background: var(--field-bg);
-    max-height: 320px;
-    overflow:auto;
-  }
-  .divider{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
 </style>
 {% endblock %}
 
@@ -97,7 +85,7 @@
   <div class="card">
     <div class="head">
       <h2>გადახდების ისტორია</h2>
-      <div class="sub">აბონ(₾) + ტრენ(₾) = სულ(₾) • „დაწვრილებით“ აჩვენებს ამ კლიენტის ყველა გადახდას</div>
+      <div class="sub">აბონ(₾) + ტრენ(₾) = სულ(₾)</div>
     </div>
     <div class="body">
       <div class="tableWrap" style="max-height:520px; overflow:auto;">
@@ -112,7 +100,7 @@
               <th>ტრენ(₾)</th>
               <th>სულ(₾)</th>
               <th>მეთოდი</th>
-              <th style="width:140px">ქმედება</th>
+              <th style="width:170px">ქმედება</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -123,51 +111,54 @@
 
 </div>
 
-<!-- Details Modal -->
-<div class="modalOverlay" id="overlayDetails">
-  <div class="modal" style="max-width:980px;">
+<!-- Edit Modal -->
+<div class="modalOverlay" id="overlayEdit">
+  <div class="modal" style="max-width:860px;">
     <div class="mhead">
-      <strong id="dTitle">დაწვრილებით</strong>
-      <button class="closeX" id="dClose" type="button">✕</button>
+      <strong id="eTitle">რედაქტირება</strong>
+      <button class="closeX" id="eClose" type="button">✕</button>
     </div>
 
     <div class="mbody">
-      <div class="kv" id="dKV"></div>
+      <div class="kv">
+        <label>კლიენტი *</label>
+        <select class="input" id="e_client"></select>
 
-      <div class="divider"></div>
+        <label>ტრენერი</label>
+        <select class="input" id="e_trainer"></select>
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
-        <div>
-          <div style="font-weight:900">კლიენტის გადახდების ისტორია</div>
-          <div class="muted" style="font-size:12px;margin-top:2px" id="dSub">—</div>
-        </div>
+        <label>ტრენერის სტავკა</label>
+        <input class="input" id="e_trainer_fee" disabled>
 
-        <div class="muted" style="font-size:12px">
-          ჯამი: <span class="mono" id="dSum">0.00₾</span>
-        </div>
+        <label>აბონემენტი</label>
+        <select class="input" id="e_membership"></select>
+
+        <label>აბონემენტის თანხა</label>
+        <input class="input" id="e_mem_amount" disabled>
+
+        <label>სულ გადასახდელი</label>
+        <input class="input" id="e_total" disabled>
+
+        <label>Fixed Start</label>
+        <input class="input" id="e_fixed_start" type="date">
+
+        <label>Fixed End</label>
+        <input class="input" id="e_fixed_end" type="date">
+
+        <label>მეთოდი *</label>
+        <select class="input" id="e_method">
+          <option value="cash">ქეში</option>
+          <option value="card">ბარათი</option>
+          <option value="transfer">ტრანსფერი</option>
+        </select>
       </div>
 
-      <div class="modalTableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>თარიღი</th>
-              <th>ტრენერი</th>
-              <th>აბონემენტი</th>
-              <th>Fixed</th>
-              <th>აბონ(₾)</th>
-              <th>ტრენ(₾)</th>
-              <th>სულ(₾)</th>
-              <th>მეთოდი</th>
-            </tr>
-          </thead>
-          <tbody id="dTbody"></tbody>
-        </table>
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn primary" id="btnSaveEdit" type="button">💾 შენახვა</button>
+        <button class="btn" id="btnCancelEdit" type="button">გაუქმება</button>
       </div>
 
-      <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
-        <button class="btn" id="dGoPayments" type="button">↩︎ დახურვა</button>
-      </div>
+      <div class="hint">Edit-ში “სულ” ითვლება: membership price + trainer fee (ბექიც გადაამოწმებს).</div>
     </div>
   </div>
 </div>
@@ -182,37 +173,33 @@
   let trainersCache = [];
   let paymentsCache = [];
 
+  let editingId = null;
+
   // ===== helpers
   function fmtMoney(v){
     const n = Number(v ?? 0);
     return Number.isFinite(n) ? n.toFixed(2) : "0.00";
   }
-
   function fmtDT(iso){
     if(!iso) return "—";
     return String(iso).slice(0,19).replace("T"," ");
   }
 
-  function membershipPriceFromSelect(){
-    const opt = $("p_membership").selectedOptions[0];
+  function getOptPrice(selectId){
+    const opt = $(selectId).selectedOptions[0];
     return (opt && opt.dataset && opt.dataset.price) ? Number(opt.dataset.price) : 0;
   }
-
-  function trainerFeeFromSelect(){
-    const opt = $("p_trainer").selectedOptions[0];
+  function getOptFee(selectId){
+    const opt = $(selectId).selectedOptions[0];
     return (opt && opt.dataset && opt.dataset.fee) ? Number(opt.dataset.fee) : 0;
   }
 
-  function updateTrainerFeeView(){
-    const fee = trainerFeeFromSelect();
-    $("p_trainer_fee").value = `${fmtMoney(fee)}₾`;
-  }
-
-  function recalcTotals(){
-    const mem = membershipPriceFromSelect();
-    const fee = trainerFeeFromSelect();
-    $("p_mem_amount").value = `${fmtMoney(mem)}₾`;
-    $("p_total").value = `${fmtMoney(mem + fee)}₾`;
+  function recalc(prefix){
+    const mem = getOptPrice(prefix+"_membership");
+    const fee = getOptFee(prefix+"_trainer");
+    $(prefix+"_mem_amount").value = `${fmtMoney(mem)}₾`;
+    $(prefix+"_trainer_fee").value = `${fmtMoney(fee)}₾`;
+    $(prefix+"_total").value = `${fmtMoney(mem + fee)}₾`;
   }
 
   // ===== load data
@@ -220,9 +207,13 @@
     const res = await fetch("/api/clients/");
     if(!res.ok){ toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა"); return; }
     clientsCache = await res.json();
-    $("p_client").innerHTML = clientsCache.map(c =>
+
+    const options = clientsCache.map(c =>
       `<option value="${c.id}">${c.first_name} ${c.last_name} (${c.phone})</option>`
     ).join("");
+
+    $("p_client").innerHTML = options;
+    $("e_client").innerHTML = options;
   }
 
   async function loadTrainers(){
@@ -230,13 +221,16 @@
     if(!res.ok){ toast("bad","შეცდომა","ტრენერები ვერ ჩაიტვირთა"); return; }
     trainersCache = await res.json();
 
-    $("p_trainer").innerHTML =
+    const opts =
       `<option value="">— ტრენერის გარეშე —</option>` +
       trainersCache.map(t => `
         <option value="${t.id}" data-fee="${t.fee}">
           ${t.first_name} ${t.last_name} • ${fmtMoney(t.fee)}₾
         </option>
       `).join("");
+
+    $("p_trainer").innerHTML = opts;
+    $("e_trainer").innerHTML = opts;
   }
 
   async function loadMemberships(){
@@ -244,19 +238,21 @@
     if(!res.ok){ toast("bad","შეცდომა","აბონემენტები ვერ ჩაიტვირთა"); return; }
     membershipsCache = await res.json();
 
-    $("p_membership").innerHTML =
+    const opts =
       `<option value="">— აბონემენტის გარეშე —</option>` +
       membershipsCache.map(m =>
         `<option value="${m.id}" data-price="${m.price}">
           ${m.name} • ${m.membership_type} • ${fmtMoney(m.price)}₾
         </option>`
       ).join("");
+
+    $("p_membership").innerHTML = opts;
+    $("e_membership").innerHTML = opts;
   }
 
   // ===== history render
   function renderPayments(items){
     paymentsCache = Array.isArray(items) ? items.slice() : [];
-
     const tb = $("tbody");
     tb.innerHTML = "";
 
@@ -273,15 +269,19 @@
         <td>${p.method || "—"}</td>
         <td>
           <div class="tdActions">
-            <button class="btn" data-details="${p.id}" type="button">დაწვრილებით</button>
+            <button class="btn" data-edit="${p.id}" type="button">✏️ რედაქტირება</button>
+            <button class="btn danger" data-del="${p.id}" type="button">🗑️ წაშლა</button>
           </div>
         </td>
       `;
       tb.appendChild(tr);
     });
 
-    tb.querySelectorAll("[data-details]").forEach(btn=>{
-      btn.addEventListener("click", ()=> openDetailsModal(Number(btn.dataset.details)));
+    tb.querySelectorAll("[data-edit]").forEach(btn=>{
+      btn.addEventListener("click", ()=> openEdit(Number(btn.dataset.edit)));
+    });
+    tb.querySelectorAll("[data-del]").forEach(btn=>{
+      btn.addEventListener("click", ()=> deletePayment(Number(btn.dataset.del)));
     });
   }
 
@@ -292,80 +292,9 @@
     renderPayments(data);
   }
 
-  // ===== Details modal
-  const overlayDetails = $("overlayDetails");
-
-  function closeDetails(){
-    overlayDetails.classList.remove("show");
-  }
-
-  function openDetailsModal(paymentId){
-    const p = paymentsCache.find(x => Number(x.id) === Number(paymentId));
-    if(!p){
-      toast("bad","შეცდომა","გადახდის პოვნა ვერ მოხერხდა");
-      return;
-    }
-
-    // PaymentSerializer-ში გვაქვს client id field ("client")
-    const clientId = p.client;  // IMPORTANT: serializer fields-ში "client" გაქვს
-    const clientName = p.client_name || "—";
-
-    $("dTitle").textContent = `დაწვრილებით • ${clientName}`;
-    $("dKV").innerHTML = `
-      <label>Payment ID</label><div class="mono">${p.id}</div>
-      <label>თარიღი</label><div>${fmtDT(p.created_at)}</div>
-      <label>კლიენტი</label><div>${clientName}</div>
-      <label>ტრენერი</label><div>${p.trainer_name || "—"}</div>
-      <label>აბონემენტი</label><div>${p.membership_name || "—"}</div>
-      <label>Fixed Start</label><div>${p.fixed_start || "—"}</div>
-      <label>Fixed End</label><div>${p.fixed_end || "—"}</div>
-      <label>მეთოდი</label><div>${p.method || "—"}</div>
-      <label>აბონემენტი (₾)</label><div style="font-weight:900">${fmtMoney(p.membership_amount)}₾</div>
-      <label>ტრენერი (₾)</label><div style="font-weight:900">${fmtMoney(p.trainer_fee)}₾</div>
-      <label>სულ (₾)</label><div style="font-weight:900">${fmtMoney(p.amount)}₾</div>
-    `;
-
-    // Client payments history (filter)
-    const list = paymentsCache
-      .filter(x => String(x.client) === String(clientId))
-      .sort((a,b)=> Number(b.id) - Number(a.id));
-
-    $("dSub").textContent = `კლიენტი: ${clientName} • ჩანაწერები: ${list.length}`;
-
-    const sum = list.reduce((acc, x)=> acc + Number(x.amount || 0), 0);
-    $("dSum").textContent = `${fmtMoney(sum)}₾`;
-
-    const dTb = $("dTbody");
-    dTb.innerHTML = "";
-    list.forEach(x=>{
-      const fixed = (x.fixed_start || x.fixed_end) ? `${x.fixed_start || "—"} → ${x.fixed_end || "—"}` : "—";
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${fmtDT(x.created_at)}</td>
-        <td>${x.trainer_name || "—"}</td>
-        <td>${x.membership_name || "—"}</td>
-        <td>${fixed}</td>
-        <td>${fmtMoney(x.membership_amount)}₾</td>
-        <td>${fmtMoney(x.trainer_fee)}₾</td>
-        <td style="font-weight:900">${fmtMoney(x.amount)}₾</td>
-        <td>${x.method || "—"}</td>
-      `;
-      dTb.appendChild(row);
-    });
-
-    overlayDetails.classList.add("show");
-  }
-
-  $("dClose").addEventListener("click", closeDetails);
-  overlayDetails.addEventListener("click", (e)=>{ if(e.target===overlayDetails) closeDetails(); });
-  $("dGoPayments").addEventListener("click", closeDetails);
-
-  // ===== events
-  $("p_membership").addEventListener("change", recalcTotals);
-  $("p_trainer").addEventListener("change", ()=>{
-    updateTrainerFeeView();
-    recalcTotals();
-  });
+  // ===== create payment
+  $("p_membership").addEventListener("change", ()=>recalc("p"));
+  $("p_trainer").addEventListener("change", ()=>recalc("p"));
 
   $("btnPay").addEventListener("click", async ()=>{
     const client = $("p_client").value;
@@ -401,29 +330,120 @@
       return;
     }
 
-    toast(
-      "ok",
-      "OK",
-      `შენახულია ✅ სულ: ${fmtMoney(data.amount)}₾ (აბონ: ${fmtMoney(data.membership_amount)}₾ + ტრენ: ${fmtMoney(data.trainer_fee)}₾)`
-    );
-
+    toast("ok","OK",`შენახულია ✅ სულ: ${fmtMoney(data.amount)}₾`);
     $("p_fixed_start").value = "";
     $("p_fixed_end").value = "";
     $("p_membership").value = "";
     $("p_trainer").value = "";
-    updateTrainerFeeView();
-    recalcTotals();
-
+    recalc("p");
     await loadPayments();
   });
 
+  // ===== edit modal
+  const overlayEdit = $("overlayEdit");
+
+  function openEdit(id){
+    const p = paymentsCache.find(x => Number(x.id) === Number(id));
+    if(!p){ toast("bad","შეცდომა","ჩანაწერი ვერ მოიძებნა"); return; }
+
+    editingId = id;
+    $("eTitle").textContent = `რედაქტირება • Payment #${id}`;
+
+    $("e_client").value = String(p.client || "");
+    $("e_trainer").value = (p.trainer === null || p.trainer === undefined) ? "" : String(p.trainer);
+    $("e_membership").value = (p.membership === null || p.membership === undefined) ? "" : String(p.membership);
+
+    $("e_fixed_start").value = p.fixed_start || "";
+    $("e_fixed_end").value = p.fixed_end || "";
+    $("e_method").value = p.method || "cash";
+
+    recalc("e");
+    overlayEdit.classList.add("show");
+  }
+
+  function closeEdit(){
+    overlayEdit.classList.remove("show");
+    editingId = null;
+  }
+
+  $("eClose").addEventListener("click", closeEdit);
+  $("btnCancelEdit").addEventListener("click", closeEdit);
+  overlayEdit.addEventListener("click", (e)=>{ if(e.target===overlayEdit) closeEdit(); });
+
+  $("e_membership").addEventListener("change", ()=>recalc("e"));
+  $("e_trainer").addEventListener("change", ()=>recalc("e"));
+
+  $("btnSaveEdit").addEventListener("click", async ()=>{
+    if(!editingId){ return; }
+
+    const client = $("e_client").value;
+    const membership = $("e_membership").value || null;
+    const trainer = $("e_trainer").value || null;
+    const method = $("e_method").value;
+
+    if(!client || !method){
+      toast("bad","შეცდომა","შეავსე: კლიენტი და მეთოდი");
+      return;
+    }
+
+    const payload = {
+      client: Number(client),
+      membership: membership ? Number(membership) : null,
+      trainer: trainer ? Number(trainer) : null,
+      method: method,
+      fixed_start: $("e_fixed_start").value || null,
+      fixed_end: $("e_fixed_end").value || null,
+    };
+
+    const res = await fetch(`/api/payments/${editingId}/`, {
+      method:"PUT",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      body: JSON.stringify(payload)
+    });
+
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok){
+      toast("bad","ვერ შეინახა", data.detail || JSON.stringify(data));
+      return;
+    }
+
+    toast("ok","OK",`განახლდა ✅ სულ: ${fmtMoney(data.amount)}₾`);
+    closeEdit();
+    await loadPayments();
+  });
+
+  // ===== delete
+  async function deletePayment(id){
+    const p = paymentsCache.find(x => Number(x.id) === Number(id));
+    const label = p ? `${p.client_name || ""} • ${fmtMoney(p.amount)}₾` : `Payment #${id}`;
+
+    if(!confirm(`დარწმუნებული ხარ რომ წაშალო?\n${label}`)) return;
+
+    const res = await fetch(`/api/payments/${id}/`, {
+      method:"DELETE",
+      headers: {"X-CSRFToken": csrftoken}
+    });
+
+    if(!res.ok){
+      let err = {};
+      try{ err = await res.json(); }catch(e){}
+      toast("bad","ვერ წაიშალა", err.detail || JSON.stringify(err) || "შეცდომა");
+      return;
+    }
+
+    toast("ok","OK","წაიშალა ✅");
+    await loadPayments();
+  }
+
+  // ===== reload
   $("btnReload").addEventListener("click", async ()=>{
     await loadClients();
     await loadTrainers();
     await loadMemberships();
     await loadPayments();
-    updateTrainerFeeView();
-    recalcTotals();
+    recalc("p");
     toast("ok","OK","განახლდა");
   });
 
@@ -433,8 +453,7 @@
     await loadTrainers();
     await loadMemberships();
     await loadPayments();
-    updateTrainerFeeView();
-    recalcTotals();
+    recalc("p");
   })();
 </script>
 {% endblock %}

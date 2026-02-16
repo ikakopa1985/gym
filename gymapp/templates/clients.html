@@ -56,6 +56,8 @@
 
   .hint{font-size:12px;color:var(--muted);margin-top:8px}
 
+  .tdActions{white-space:nowrap; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+
   /* modal body spacing */
   .mbody .kv{grid-template-columns:180px 1fr}
   @media (max-width: 760px){
@@ -108,11 +110,11 @@
   </div>
 </div>
 
-<!-- New Client Modal -->
+<!-- New/Edit Client Modal -->
 <div class="modalOverlay" id="overlayNew">
   <div class="modal">
     <div class="mhead">
-      <strong>ახალი კლიენტი</strong>
+      <strong id="newTitle">ახალი კლიენტი</strong>
       <button class="closeX" id="closeNew" type="button">✕</button>
     </div>
     <div class="mbody">
@@ -154,6 +156,9 @@
         <button class="btn primary" id="btnSave" type="button">შენახვა</button>
         <button class="btn" id="btnCancel" type="button">გაუქმება</button>
       </div>
+      <div class="hint" id="editHint" style="display:none">
+        რედაქტირებაზე თუ ფოტოს არ აირჩევ, ძველი ფოტო დარჩება.
+      </div>
     </div>
   </div>
 </div>
@@ -177,12 +182,23 @@
   const overlayNew = $("overlayNew");
   const overlayView = $("overlayView");
 
-  function openNew(){ overlayNew.classList.add("show"); }
+  let editId = null;
+  let lastLoaded = [];
+
+  function openNewModal(){
+    editId = null;
+    $("newTitle").textContent = "ახალი კლიენტი";
+    $("btnSave").textContent = "შენახვა";
+    $("editHint").style.display = "none";
+    clearForm();
+    overlayNew.classList.add("show");
+  }
   function closeNew(){ overlayNew.classList.remove("show"); }
+
   function openView(){ overlayView.classList.add("show"); }
   function closeView(){ overlayView.classList.remove("show"); }
 
-  $("btnOpenNew").addEventListener("click", openNew);
+  $("btnOpenNew").addEventListener("click", openNewModal);
   $("closeNew").addEventListener("click", closeNew);
   $("btnCancel").addEventListener("click", closeNew);
   overlayNew.addEventListener("click", (e)=>{ if(e.target===overlayNew) closeNew(); });
@@ -199,7 +215,6 @@
 
   function photoUrl(v){
     if(!v) return null;
-    // თუ backend აბრუნებს absolute URL-ს ან relative-ს, ორივე იმუშავებს
     if(String(v).startsWith("http://") || String(v).startsWith("https://")) return v;
     if(String(v).startsWith("/")) return v;
     return "/" + v;
@@ -211,7 +226,24 @@
     return `<div class="avatar" style="display:grid;place-items:center;font-weight:900;">👤</div>`;
   }
 
-  let lastLoaded = []; // fallback filter-სთვის
+  function clearForm(){
+    ["c_first","c_last","c_phone","c_email","c_org","c_card"].forEach(id=>$(id).value="");
+    $("c_birth").value="";
+    $("c_gender").value="";
+    $("c_photo").value="";
+  }
+
+  function fillForm(c){
+    $("c_first").value = c.first_name || "";
+    $("c_last").value  = c.last_name || "";
+    $("c_phone").value = c.phone || "";
+    $("c_email").value = c.email || "";
+    $("c_org").value   = c.organization || "";
+    $("c_card").value  = c.card_number || "";
+    $("c_birth").value = c.birth_date || "";
+    $("c_gender").value = c.gender || "";
+    $("c_photo").value = "";
+  }
 
   function renderRows(items){
     lastLoaded = items || [];
@@ -238,14 +270,24 @@
         <td>${c.email || "—"}</td>
         <td>${c.organization || "—"}</td>
         <td>
-          <button class="btn" data-view="${c.id}" type="button">👁️ ნახვა</button>
+          <div class="tdActions">
+            <button class="btn" data-view="${c.id}" type="button">👁️ ნახვა</button>
+            <button class="btn" data-edit="${c.id}" type="button">✏️ რედაქტირება</button>
+            <button class="btn danger" data-del="${c.id}" type="button">🗑️ წაშლა</button>
+          </div>
         </td>
       `;
       tbody.appendChild(tr);
     }
 
     tbody.querySelectorAll("[data-view]").forEach(btn=>{
-      btn.addEventListener("click", ()=> viewClient(Number(btn.getAttribute("data-view"))));
+      btn.addEventListener("click", ()=> viewClient(Number(btn.dataset.view)));
+    });
+    tbody.querySelectorAll("[data-edit]").forEach(btn=>{
+      btn.addEventListener("click", ()=> editClient(Number(btn.dataset.edit)));
+    });
+    tbody.querySelectorAll("[data-del]").forEach(btn=>{
+      btn.addEventListener("click", ()=> deleteClient(Number(btn.dataset.del)));
     });
   }
 
@@ -261,11 +303,9 @@
   }
 
   async function loadClients(q=""){
-    // 1) პირველ რიგში ვცადოთ backend search
     const url = q ? `/api/clients/?search=${encodeURIComponent(q)}` : "/api/clients/";
     let res = await fetch(url);
 
-    // 2) თუ search არ გიჭერს backend-ზე -> ჩამოვიტანოთ ყველა და frontend-ზე გავფილტროთ
     if(!res.ok && q){
       res = await fetch("/api/clients/");
       if(!res.ok){
@@ -311,12 +351,61 @@
         <label>სქესი</label><div>${genderLabel(c.gender)}</div>
         <label>ორგანიზაცია</label><div>${c.organization || "—"}</div>
         <label>ბარათის ნომერი</label><div>${c.card_number || "—"}</div>
-        <label>ტრენერი</label><div>${c.trainer_name || "—"}</div>
-        <label>აბონემენტი</label><div>${c.active_membership_name || "—"}</div>
         <label>სტატუსი</label><div>${(c.is_active === true) ? "აქტიურია" : ((c.is_active === false) ? "ვადაგასულია" : "—")}</div>
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn" id="vEdit" type="button">✏️ რედაქტირება</button>
+        <button class="btn danger" id="vDel" type="button">🗑️ წაშლა</button>
       </div>
     `;
     openView();
+
+    $("vEdit").addEventListener("click", ()=>{
+      closeView();
+      editClient(id);
+    });
+
+    $("vDel").addEventListener("click", ()=>{
+      deleteClient(id);
+    });
+  }
+
+  async function editClient(id){
+    const res = await fetch(`/api/clients/${id}/`);
+    if(!res.ok){
+      toast("bad","შეცდომა","კლიენტის გახსნა ვერ მოხერხდა.");
+      return;
+    }
+    const c = await res.json();
+
+    editId = id;
+    $("newTitle").textContent = "კლიენტის რედაქტირება";
+    $("btnSave").textContent = "განახლება";
+    $("editHint").style.display = "block";
+
+    fillForm(c);
+    overlayNew.classList.add("show");
+  }
+
+  async function deleteClient(id){
+    if(!confirm("ნამდვილად გინდა კლიენტის წაშლა?")) return;
+
+    const res = await fetch(`/api/clients/${id}/`, {
+      method: "DELETE",
+      headers: { "X-CSRFToken": csrftoken }
+    });
+
+    if(!res.ok){
+      let err = {};
+      try{ err = await res.json(); }catch(e){}
+      toast("bad","ვერ წაიშალა", err.detail || "შეიძლება კლიენტი გამოყენებულია გადახდებში/Check-in-ში.");
+      return;
+    }
+
+    toast("ok","OK","წაიშალა ✅");
+    closeView();
+    await loadClients($("q").value.trim());
   }
 
   $("btnSearch").addEventListener("click", ()=> loadClients($("q").value));
@@ -352,8 +441,11 @@
     if(card) fd.append("card_number", card);
     if(photo) fd.append("photo", photo);
 
-    const res = await fetch("/api/clients/", {
-      method: "POST",
+    const url = editId ? `/api/clients/${editId}/` : "/api/clients/";
+    const methodHttp = editId ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method: methodHttp,
       headers: { "X-CSRFToken": csrftoken },
       body: fd
     });
@@ -361,24 +453,19 @@
     if(!res.ok){
       let err = {};
       try{ err = await res.json(); }catch(e){}
-      // DRF validation dict ხშირად {"field":["..."]} მოდის
       const msg = err.detail
         || (err.card_number && err.card_number[0])
         || (err.phone && err.phone[0])
         || JSON.stringify(err)
         || "შეამოწმე მონაცემები.";
-      toast("bad","ვერ შეინახა", msg);
+      toast("bad", editId ? "ვერ განახლდა" : "ვერ შეინახა", msg);
       return;
     }
 
-    toast("ok","შენახულია","ახალი კლიენტი დაემატა ✅");
+    toast("ok","OK", editId ? "განახლდა ✅" : "დაემატა ✅");
     closeNew();
-
-    ["c_first","c_last","c_phone","c_email","c_org","c_card"].forEach(id=>$(id).value="");
-    $("c_birth").value="";
-    $("c_gender").value="";
-    $("c_photo").value="";
-
+    clearForm();
+    editId = null;
     await loadClients($("q").value.trim());
   });
 
