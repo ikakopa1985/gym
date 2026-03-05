@@ -520,13 +520,12 @@
 
     const payload = {
       client: Number(client),
-      membership: membership ? Number(membership) : null,
-      trainer: trainer ? Number(trainer) : null,
+      membership: membership ? Number(membership) : undefined,
+      trainer: trainer ? Number(trainer) : undefined,
       method: method,
       fixed_start: $("p_fixed_start").value || null,
       fixed_end: $("p_fixed_end").value || null,
       operation_date: localInputToISO($("p_operation_date").value),
-      // ✅ თუ user-მა ჩასწორა, გავგზავნით override-ს, თუ არა -> null
       total_amount: (pTotalOverridden && totalOverride !== null) ? totalOverride : null
     };
 

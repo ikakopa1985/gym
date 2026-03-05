@@ -183,6 +183,16 @@ class Payment(models.Model):
     amount = models.DecimalField("სულ თანხა", max_digits=8, decimal_places=2)
 
     method = models.CharField("გადახდის მეთოდი", max_length=20, choices=PAYMENT_METHODS)
+
+
+    client_membership = models.ForeignKey(
+        ClientMembership,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL
+    )
+
+
     created_at = models.DateTimeField("გადახდის დრო", auto_now_add=True)
 
     def __str__(self):

@@ -398,17 +398,28 @@
   }
 
   async function loadSummary(){
-    const res = await fetch("/api/reports/summary/");
-    if(!res.ok) return;
-    const s = await res.json();
+  const res = await fetch("/api/reports/summary/");
+  if(!res.ok) return;
+  const s = await res.json();
 
-    $("statTodayCheckins").textContent = Number(s.today_checkins || 0);
-    $("statTodayIncome").textContent = `${Number(s.today_income || 0).toFixed(2)}₾`;
-    $("statMonthIncome").textContent = `${Number(s.month_income || 0).toFixed(2)}₾`;
+  $("statTodayCheckins").textContent = Number(s.today_checkins || 0);
 
-    $("chipActive").textContent = `აქტიური: ${Number(s.active_memberships || 0)}`;
-    $("chipExpired").textContent = `ვადაგასული: ${Number(s.expired_memberships || 0)}`;
-  }
+  $("statTodayIncome").textContent = `${Number(s.today_income || 0).toFixed(2)}₾`;
+  $("statMonthIncome").textContent = `${Number(s.month_income || 0).toFixed(2)}₾`;
+
+  // ✅ დღეს მეთოდებით
+  $("todayCash").textContent = `${Number(s.today_cash || 0).toFixed(2)}₾`;
+  $("todayCard").textContent = `${Number(s.today_card || 0).toFixed(2)}₾`;
+  $("todayTransfer").textContent = `${Number(s.today_transfer || 0).toFixed(2)}₾`;
+
+  // ✅ თვეში მეთოდებით
+  $("monthCash").textContent = `${Number(s.month_cash || 0).toFixed(2)}₾`;
+  $("monthCard").textContent = `${Number(s.month_card || 0).toFixed(2)}₾`;
+  $("monthTransfer").textContent = `${Number(s.month_transfer || 0).toFixed(2)}₾`;
+
+  $("chipActive").textContent = `აქტიური: ${Number(s.active_memberships || 0)}`;
+  $("chipExpired").textContent = `ვადაგასული: ${Number(s.expired_memberships || 0)}`;
+}
 
   async function doCheckinByClientId(clientId){
     const res = await fetch("/api/checkins/", {

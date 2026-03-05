@@ -45,11 +45,12 @@
         <table>
           <thead>
             <tr>
-              <th style="width:28%">დასახელება</th>
-              <th style="width:18%">ტიპი</th>
-              <th style="width:18%">ფასი</th>
-              <th style="width:18%">duration_days</th>
-              <th style="width:18%">visit_count</th>
+              <th style="width:26%">დასახელება</th>
+              <th style="width:16%">ტიპი</th>
+              <th style="width:14%">ფასი</th>
+              <th style="width:14%">duration_days</th>
+              <th style="width:14%">visit_count</th>
+              <th style="width:16%">ქმედება</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -62,7 +63,7 @@
 <div class="modalOverlay" id="overlayNew">
   <div class="modal">
     <div class="mhead">
-      <strong>ახალი აბონემენტი</strong>
+      <strong id="modalTitle">ახალი აბონემენტი</strong>
       <button class="closeX" id="closeNew">✕</button>
     </div>
     <div class="mbody">
@@ -103,13 +104,63 @@
   const $ = (id)=>document.getElementById(id);
   const overlayNew = $("overlayNew");
 
-  function openNew(){ overlayNew.classList.add("show"); }
-  function closeNew(){ overlayNew.classList.remove("show"); }
+  // edit state (null => create)
+  let editingId = null;
 
-  $("btnOpenNew").addEventListener("click", openNew);
+  function openNew(){ overlayNew.classList.add("show"); }
+
+  function resetModalState(){
+    editingId = null;
+    $("modalTitle").textContent = "ახალი აბონემენტი";
+  }
+
+  function closeNew(){
+    overlayNew.classList.remove("show");
+    resetModalState();
+  }
+
+  $("btnOpenNew").addEventListener("click", ()=>{
+    resetModalState();
+    // create-ზე ვასუფთავებთ ველებს როგორც აქამდე
+    $("m_name").value=""; $("m_price").value=""; $("m_days").value=""; $("m_visits").value="";
+    openNew();
+  });
+
   $("closeNew").addEventListener("click", closeNew);
   $("btnCancel").addEventListener("click", closeNew);
   overlayNew.addEventListener("click", (e)=>{ if(e.target===overlayNew) closeNew(); });
+
+  function openEdit(m){
+    editingId = m.id;
+    $("modalTitle").textContent = "აბონემენტის რედაქტირება";
+
+    $("m_name").value = m.name ?? "";
+    $("m_type").value = m.membership_type ?? "unlimited";
+    $("m_price").value = m.price ?? "";
+    $("m_days").value = m.duration_days ?? "";
+    $("m_visits").value = m.visit_count ?? "";
+
+    openNew();
+  }
+
+  async function deleteMembership(m){
+    const ok = confirm(`წავშალო აბონემენტი?\n\n${m.name}`);
+    if(!ok) return;
+
+    const res = await fetch(`/api/memberships/${m.id}/`, {
+      method:"DELETE",
+      headers: {"X-CSRFToken": csrftoken},
+    });
+
+    if(!res.ok){
+      let err={}; try{ err=await res.json(); }catch(e){}
+      toast("bad","ვერ წაიშალა", err.detail || JSON.stringify(err));
+      return;
+    }
+
+    toast("ok","წაშლილია","აბონემენტი წაიშალა 🗑️");
+    await loadMemberships($("q").value.trim());
+  }
 
   function renderRows(items){
     $("countPill").textContent = `${items.length} აბონემენტი`;
@@ -123,7 +174,17 @@
         <td>${m.price}₾</td>
         <td>${m.duration_days ?? "—"}</td>
         <td>${m.visit_count ?? "—"}</td>
+        <td>
+          <div class="row" style="gap:8px;justify-content:flex-end">
+            <button class="btn" data-act="edit">რედაქტირება</button>
+            <button class="btn" data-act="del">წაშლა</button>
+          </div>
+        </td>
       `;
+
+      tr.querySelector('[data-act="edit"]').addEventListener("click", ()=> openEdit(m));
+      tr.querySelector('[data-act="del"]').addEventListener("click", ()=> deleteMembership(m));
+
       tbody.appendChild(tr);
     });
   }
@@ -157,18 +218,22 @@
       visit_count: $("m_visits").value ? Number($("m_visits").value) : null,
     };
 
-    const res = await fetch("/api/memberships/", {
-      method:"POST",
+    const url = editingId ? `/api/memberships/${editingId}/` : "/api/memberships/";
+    const method = editingId ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method,
       headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
       body: JSON.stringify(payload)
     });
 
     if(!res.ok){
       let err={}; try{ err=await res.json(); }catch(e){}
-      toast("bad","ვერ შეინახა", err.detail || JSON.stringify(err)); return;
+      toast("bad", editingId ? "ვერ განახლდა" : "ვერ შეინახა", err.detail || JSON.stringify(err));
+      return;
     }
 
-    toast("ok","შენახულია","აბონემენტი დაემატა ✅");
+    toast("ok", editingId ? "განახლდა" : "შენახულია", editingId ? "აბონემენტი განახლდა ✅" : "აბონემენტი დაემატა ✅");
     closeNew();
     $("m_name").value=""; $("m_price").value=""; $("m_days").value=""; $("m_visits").value="";
     await loadMemberships($("q").value.trim());
@@ -176,4 +241,4 @@
 
   loadMemberships("");
 </script>
-{% endblock %}
+{% endblock %}.

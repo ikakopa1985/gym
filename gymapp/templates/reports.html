@@ -412,13 +412,27 @@ async function loadReport(){
   async function apply(){
     const from = $("f_from").value || "";
     const to = $("f_to").value || "";
-    const ok = await loadSummary(from, to);
 
-    const ci = await loadClientsActiveInfo();
-    $("activeClients").textContent = (ci.active === null) ? "—" : ci.active;
-    $("expiredClients").textContent = (ci.expired === null) ? "—" : ci.expired;
+    const qs = new URLSearchParams();
+    if(from) qs.set("date_from", from);
+    if(to) qs.set("date_to", to);
 
-    if(ok) toast("ok","OK","რაპორტი განახლდა ✅");
+    const res = await fetch(`/api/reports/payments/?${qs.toString()}`);
+    if(!res.ok){
+      toast("bad","შეცდომა","რეპორტის ჩატვირთვა ვერ მოხერხდა");
+      return;
+    }
+    const data = await res.json();
+
+    // totals
+    $("sumTotal").textContent = fmtGel(data.stats.total_amount || 0);
+    $("sumCount").textContent = data.stats.payments_count || 0;
+    $("sumMembership").textContent = fmtGel(data.stats.memberships_sold_amount || 0); // ან membership_amount sum თუ გინდა ცალკე
+    // თუ გინდა trainer_fee sum: data.rows-იდან დათვლი ან API-ში დაამატებ
+
+    renderPayments(data.rows); // შენი არსებული renderPayments მოერგება
+
+    // TODO: by_trainer / without trainer — დაამატე შენს UI-ში ბლოკები
   }
 
   $("btnApply").addEventListener("click", apply);
