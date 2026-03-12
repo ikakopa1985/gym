@@ -20,6 +20,16 @@ urlpatterns = [
     path("payments/", payments_page, name="payments_page"),
     path("checkins/", checkins_page, name="checkins_page"),
     path("reports/", reports_page, name="reports_page"),
+    path("doorOpen/", OpenDoor, name="OpenDoor"),
+    path("sync/", sync, name="sync"),
+    path("syncpartial/", syncpartial, name="syncpartial"),
+    path("sync/status/", sync_status),
+
+
+
+    path("zk/start/", zk_start),
+    path("zk/stop/", zk_stop),
+
 
 
 

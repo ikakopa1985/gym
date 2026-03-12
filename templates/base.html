@@ -17,8 +17,8 @@
       --text:#eaf7fa;
       --muted:#a7cbd1;
 
-      --panel: rgba(12,43,49,.70);
-      --panel2: rgba(10,35,40,.72);
+      --panel: rgba(12,43,49,1);
+      --panel2: rgba(10,35,40,1);
 
       --brand:#2699A5;
       --brand2:#1D6271;
@@ -46,8 +46,8 @@
       --text:#0b1f24;
       --muted:#456a70;
 
-      --panel: rgba(255,255,255,.78);
-      --panel2: rgba(255,255,255,.72);
+      --panel: rgba(255,255,255, 1);
+      --panel2: rgba(255,255,255, 1);
 
       --brand:#2699A5;
       --brand2:#1D6271;
@@ -187,7 +187,7 @@
       color:#fff;
     }
     .btn.danger{
-      background: rgba(255,77,77,.12);
+      background: rgba(255,77,77,0.5);
       border-color: rgba(255,77,77,.35);
       color: #ffd6d6;
     }
@@ -211,7 +211,7 @@
       padding:6px 10px;border-radius:999px;
       font-weight:900;font-size:12px;
       border:1px solid var(--line);
-      background: rgba(255,255,255,.03);
+      background: rgba(255,255,255,.5);
     }
     .pill.ok{border-color: rgba(43,213,118,.35); background: rgba(43,213,118,.10); color:#d5ffe8;}
     .pill.bad{border-color: rgba(255,77,77,.35); background: rgba(255,77,77,.10); color:#ffd6d6;}
@@ -248,7 +248,7 @@
       width:min(780px, 96vw);
       border-radius:20px;
       border:1px solid var(--line);
-      background: linear-gradient(180deg, var(--panel), var(--panel2));
+      background: var(--panel);
       box-shadow: var(--shadow);
       overflow:hidden;
     }
@@ -293,7 +293,7 @@
         <a href="/memberships/" class="{% block nav_memberships_active %}{% endblock %}">🎟️ აბონემენტები</a>
         <a href="/payments/" class="{% block nav_payments_active %}{% endblock %}">💳 გადახდები</a>
         <a href="/checkins/" class="{% block nav_checkins_active %}{% endblock %}">✅ ჩეკინები</a>
-        <a href="/reports/" class="{% block nav_reports_active %}{% endblock %}">📊 რაპორტები</a>
+        <a href="/reports/" class="{% block nav_reports_active %}{% endblock %}">📊 რეპორტები</a>
       </nav>
 
       <button class="themeBtn" id="themeToggle" type="button" title="დღე/ღამე">

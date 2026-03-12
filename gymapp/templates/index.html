@@ -13,6 +13,15 @@
   @media (max-width: 980px){
     .grid{grid-template-columns:1fr}
   }
+  .blink {
+  animation: blinkAnim 1s infinite;
+}
+
+@keyframes blinkAnim {
+  0%   { background:#ff6f59; color:white; }
+  50%  { background:#ffd166; color:black; }
+  100% { background:#ff6f59; color:white; }
+}
 
   .searchRow{
     display:flex;
@@ -48,6 +57,20 @@
   tbody tr:hover{ background: rgba(38,153,165,.08); }
   .tdActions{white-space:nowrap; display:flex; gap:8px; align-items:center;}
 
+  .spin {
+  display:inline-block;
+  width:14px;
+  height:14px;
+  border:2px solid rgba(255,255,255,.3);
+  border-top:2px solid white;
+  border-radius:50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin{
+  from {transform:rotate(0deg);}
+  to {transform:rotate(360deg);}
+}
 
   .stats{display:grid;gap:12px;}
   .stat{
@@ -69,8 +92,8 @@
     font-weight:900;
   }
 
-  .pill.ok{background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.35);color:#bff3cf}
-  .pill.bad{background:rgba(255,111,89,.12);border:1px solid rgba(255,111,89,.35);color:#ffd2cc}
+  .pill.ok{background:rgba(46,204,113,0.5);border:1px solid rgba(46,204,113,.35);color:#bff3cf}
+  .pill.bad{background:rgba(255,111,89,0.5);border:1px solid rgba(255,111,89,.35);color:#ffd2cc}
 
   .muted{color:var(--muted)}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
@@ -86,6 +109,66 @@
     overflow:auto;
   }
   .divider{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
+
+
+  .blink {
+  animation: blinkAnim 1s infinite;
+}
+
+@keyframes blinkAnim {
+  0%   { background:#ff6f59; color:white; }
+  50%  { background:#ffd166; color:black; }
+  100% { background:#ff6f59; color:white; }
+}
+
+.errorBlink{
+  animation: errorBlinkAnim 1s infinite;
+}
+
+@keyframes errorBlinkAnim{
+  0% {background:#ff3b3b;color:white;}
+  50% {background:#ff9a9a;color:black;}
+  100% {background:#ff3b3b;color:white;}
+}
+
+#card-info{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.3s;
+}
+
+#card-info.show{
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#card-info .cardDialogBox{
+  background: #0f2a30;
+  border-radius: 18px;
+  padding: 30px;
+  text-align: center;
+  width: 320px;
+
+  transform: scale(0.7);
+  transition: 0.3s;
+}
+
+#card-info.show .cardDialogBox{
+  transform: scale(1);
+}
+
+#card-info .cardDialogBox{
+  transition: all 0.25s ease;
+}
+
 </style>
 {% endblock %}
 
@@ -206,19 +289,43 @@
         </div>
         <div class="body">
           <button class="btn primary" style="width:100%; justify-content:center" id="btnQuickCheckin" type="button">
-            ✅ სწრაფი Check-in (არჩეულზე)
+            ✅ კარის გაღება
           </button>
-          <button class="btn" style="width:100%; justify-content:center; margin-top:10px" id="btnRefresh" type="button">
+          <button class="btn" style="width:100%; justify-content:center; margin-top:10px" type="button" id="btnRefresh" >
             🔄 განახლება
           </button>
-          <button class="btn danger" style="width:100%; justify-content:center; margin-top:10px" id="btnExpiredList" type="button">
-            ⛔ ვადაგასულების ნახვა
-          </button>
+            <button class="btn danger"  style="width:100%; justify-content:center; margin-top:10px" type="button" id="btnExpiredList">
+              ⛔ ვადაგასულების ნახვა
+            </button>
+
+            <button class="btn"  style="width:100%; justify-content:center; margin-top:10px; display:none" type="button" id="btnsyncall">
+              🔄 სინქრონიზაცია სრული
+            </button>
+          <button class="btn"  style="width:100%; justify-content:center; margin-top:10px" type="button" id="btnsync">
+              🔄 სინქრონიზაცია
+            </button>
         </div>
       </div>
     </div>
 
   </div>
+
+<div id="card-info" class="cardDialog">
+  <div class="cardDialogBox">
+
+    <img id="photo" width="150" style="border-radius:12px;border:2px solid #ddd">
+
+    <h2 id="name" style="margin-top:10px"></h2>
+
+    <div id="card" class="mono"></div>
+
+    <div id="membership"></div>
+
+    <div id="status" style="font-size:20px;font-weight:900;margin-top:6px"></div>
+
+  </div>
+</div>
+
 
   <!-- Client Modal -->
   <div class="modalOverlay" id="overlay">
@@ -286,10 +393,93 @@
       </div>
     </div>
   </div>
+
+<button onclick="startZK()">▶ Start Scanner</button>
+<button onclick="stopZK()">⏹ Stop Scanner</button>
+
+<div id="cardDialog" class="cardDialog">
+  <div class="cardDialogBox">
+
+    <img id="d_photo" />
+
+    <div class="d_name" id="d_name"></div>
+
+    <div class="d_status" id="d_status"></div>
+
+    <div class="d_membership" id="d_membership"></div>
+
+  </div>
+</div>
+
+
+
+<script>
+
+async function startZK(){
+    const res = await fetch("/zk/start/", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      // body: JSON.stringify({ client: 0 })
+    });
+  }
+
+
+async function stopZK(){
+    const res = await fetch("/zk/stop/", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      // body: JSON.stringify({ client: 0 })
+    });
+  }
+
+
+</script>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+
+
+const socket = new WebSocket("ws://" + window.location.host + "/ws/cards/");
+
+socket.onmessage = function(e){
+
+    const msg = JSON.parse(e.data);
+    console.log(msg)
+
+    const name = document.getElementById("name");
+    const photo = document.getElementById("photo");
+    const card = document.getElementById("card");
+    const membership = document.getElementById("membership");
+    const status = document.getElementById("status");
+
+    name.innerText = msg.name + " " + msg.lastname;
+    photo.src = msg.photo || "/static/no-photo.jpg";
+    card.innerText = "Card: " + (msg.card || "—");
+
+    if(msg.status === "ok"){
+        membership.innerText = "Valid until: " + msg.start_date +'   '+ msg.end_date;
+        status.innerText = "✅ ACTIVE";
+        status.style.color = "#2ecc71";
+    }else{
+        membership.innerText = "NO ACTIVE MEMBERSHIP";
+        status.innerText = "⛔ DENIED";
+        status.style.color = "#ff3b3b";
+    }
+
+    // ✅ აქ ვაჩვენებთ dialog-ს
+    const dialog = document.getElementById("card-info");
+
+    dialog.classList.add("show");
+
+    if(window.cardTimer){
+        clearTimeout(window.cardTimer);
+    }
+
+    window.cardTimer = setTimeout(()=>{
+        dialog.classList.remove("show");
+    }, 5000);
+};
   const $ = (id) => document.getElementById(id);
 
   let clientsCache = [];
@@ -331,7 +521,7 @@
         </td>
         <td>${c.phone || "—"}</td>
         <td>${membershipText(c)}</td>
-        <td>${pillStatus(!!c.is_active)}</td>
+        <td>${pillStatus(!!c.active_membership_id)}</td>
         <td>
           <div class="tdActions">
             <button class="btn primary" data-checkin="${c.id}" type="button">✅ Check-in</button>
@@ -345,7 +535,7 @@
 
     $("clientsCountPill").textContent = `${list.length} კლიენტი`;
 
-    const activeCount = list.filter(x => !!x.is_active).length;
+    const activeCount = list.filter(x => !!x.active_membership_id).length;
     const expiredCount = list.length - activeCount;
     $("chipActive").textContent = `აქტიური: ${activeCount}`;
     $("chipExpired").textContent = `ვადაგასული: ${expiredCount}`;
@@ -372,10 +562,49 @@
       });
     }
     if(onlyExpiredMode){
-      list = list.filter(c => !c.is_active);
+      list = list.filter(c => !c.active_membership_id);
     }
     renderClients(list);
   }
+
+  async function syncall(){
+    const res = await fetch("/sync/", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      body: JSON.stringify({ client: 0 })
+    });
+  }
+
+
+async function sync(){
+
+  const btn = document.getElementById("btnsync");
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spin"></span> სინქრონიზაცია...`;
+
+  try{
+
+    const res = await fetch("/syncpartial/", {
+      method: "POST",
+      headers: {
+        "Content-Type":"application/json",
+        "X-CSRFToken": csrftoken
+      },
+      body: JSON.stringify({ client: 0 })
+    });
+
+  }catch(e){
+    console.log(e);
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = "🔄 სინქრონიზაცია";
+
+  await checkSyncStatus();
+}
+
+
 
   async function loadClients(){
     const res = await fetch("/api/clients/");
@@ -384,6 +613,7 @@
       return;
     }
     clientsCache = await res.json();
+    console.log(clientsCache)
     applySearch();
   }
 
@@ -442,25 +672,12 @@
     await loadSummary();
   }
 
-  async function doCheckinByPhone(phone){
-    const res = await fetch("/api/checkins/quick/", {
+  async function doorOpen(){
+    const res = await fetch("/doorOpen/", {
       method: "POST",
       headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
-      body: JSON.stringify({ phone })
+      body: JSON.stringify({ client: 0 })
     });
-
-    let data = {};
-    try{ data = await res.json(); }catch(e){}
-
-    if(!res.ok){
-      toast("bad","ვერ შესრულდა", data.detail || "კლიენტი ვერ მოიძებნა / ვადაგასულია");
-      return;
-    }
-
-    toast("ok","OK","Check-in დაფიქსირდა ✅");
-    await loadClients();
-    await loadPayments();
-    await loadSummary();
   }
 
   // ===== Client modal
@@ -555,6 +772,8 @@
   $("btnSearch").addEventListener("click", ()=> applySearch());
   $("btnReset").addEventListener("click", ()=> { $("q").value=""; applySearch(); });
   $("btnExpiredList").addEventListener("click", ()=> { onlyExpiredMode = true; applySearch(); });
+  $("btnsyncall").addEventListener("click", ()=> { syncall() });
+  $("btnsync").addEventListener("click", ()=> { sync() });
   $("btnRefresh").addEventListener("click", async ()=> {
     onlyExpiredMode = false;
     await loadClients();
@@ -564,26 +783,70 @@
   $("q").addEventListener("keydown", (e)=>{ if(e.key==="Enter") applySearch(); });
 
   $("btnQuickCheckin").addEventListener("click", ()=>{
-    const phone = ($("q").value || "").trim();
-    if(phone && /^\d{6,}$/.test(phone)){
-      doCheckinByPhone(phone);
-      return;
-    }
-    if(!selectedClientId){
-      toast(null, "აირჩიე კლიენტი", "👁️ ნახვა გახსენი ან ძებნაში ტელეფონი ჩაწერე.");
-      return;
-    }
-    doCheckinByClientId(selectedClientId);
+      doorOpen();
   });
 
   $("btnNewClient").addEventListener("click", ()=> { window.location.href = "/clients/"; });
   $("btnNewPayment").addEventListener("click", ()=> { window.location.href = "/payments/"; });
+
+
+
+document.getElementById("card-info").addEventListener("click", function(e){
+    if(e.target.id === "card-info"){
+        this.classList.remove("show");
+    }
+});
+
+
+async function checkSyncStatus(){
+
+  const btn = document.getElementById("btnsync");
+
+  try{
+
+    const res = await fetch("/sync/status/");
+    if(!res.ok) return;
+
+    const data = await res.json();
+
+    btn.classList.remove("blink");
+    btn.classList.remove("errorBlink");
+
+    // ERROR
+    if(data.error > 0){
+
+        btn.classList.add("errorBlink");
+        btn.innerHTML = `⚠ შეცდომა (${data.error})`;
+
+    }
+
+    // PENDING
+    else if(data.pending > 0){
+
+        btn.classList.add("blink");
+        btn.innerHTML = `🔄 სინქრონიზაცია (${data.pending})`;
+
+    }
+
+    // OK
+    else{
+
+        btn.innerHTML = "🔄 სინქრონიზაცია";
+
+    }
+
+  }catch(e){
+    console.log(e);
+  }
+}
 
   // init
   (async ()=>{
     await loadClients();
     await loadPayments();
     await loadSummary();
+    await checkSyncStatus();
   })();
 </script>
+
 {% endblock %}

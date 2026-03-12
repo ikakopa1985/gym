@@ -742,9 +742,27 @@ $("btnSaveEdit").addEventListener("click", async ()=>{
     await loadTrainers();
     await loadMemberships();
     await loadPayments();
+    setFixedDates();
     setDefaultOperationDates();
     pTotalOverridden = false;
     recalc("p");
   })();
+
+  function setFixedDates(){
+  const today = new Date();
+
+  // start = today
+  const start = today.toISOString().split("T")[0];
+
+  // end = +1 month
+  const endDate = new Date(today);
+  endDate.setMonth(endDate.getMonth() + 1);
+  const end = endDate.toISOString().split("T")[0];
+
+  document.getElementById("p_fixed_start").value = start;
+  document.getElementById("p_fixed_end").value = end;
+}
+
+
 </script>
 {% endblock %}

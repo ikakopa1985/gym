@@ -57,6 +57,7 @@ class ClientMembership(models.Model):
         related_name="client_memberships",
         verbose_name="აბონემენტი",
     )
+    
 
     start_date = models.DateField("დაწყების თარიღი")
     end_date = models.DateField("დასრულების თარიღი", null=True, blank=True)
@@ -68,35 +69,42 @@ class ClientMembership(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+
     class Meta:
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(fields=["client", "status"]),
             models.Index(fields=["end_date"]),
         ]
 
-    def __str__(self):
-        return f"{self.client} • {self.membership.name} ({self.status})"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client"],
+                condition=Q(status="active"),
+                name="one_active_membership_per_client"
+            )
+        ]
 
-    def is_active(self) -> bool:
+    def is_active(self):
+
         if self.status != "active":
             return False
 
-        today = now().date()
+        today = timezone.localdate()
         mtype = self.membership.membership_type
 
         if mtype == "limited":
             return (self.remaining_visits or 0) > 0
 
         if mtype == "unlimited":
-            return self.end_date is not None and self.end_date >= today
+            return self.end_date and self.end_date >= today
 
         if mtype == "fixed":
-            if not self.end_date:
-                return False
             return self.start_date <= today <= self.end_date
 
         return False
+
 
 
 class Client(models.Model):
@@ -129,21 +137,24 @@ class Client(models.Model):
     # )
     created_at = models.DateTimeField("შექმნის დრო", auto_now_add=True)
 
+    @property
+    def active_membership(self):
+
+        cms = self.memberships.select_related("membership").all()
+
+        for cm in cms:
+            if cm.is_active():
+                return cm
+
+        return None
+
+    @property
+    def has_active_membership(self):
+        return self.memberships.filter(status="active").exists()
+
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 
-    @property
-    def active_membership(self):
-        today = now().date()
-        return self.memberships.filter(status="active").filter(
-            Q(membership__membership_type="limited", remaining_visits__gt=0) |
-            Q(membership__membership_type="unlimited", end_date__gte=today) |
-            Q(membership__membership_type="fixed", start_date__lte=today, end_date__gte=today)
-        ).order_by("-created_at").first()
-
-    def is_membership_active(self) -> bool:
-        cm = self.active_membership
-        return bool(cm and cm.is_active())
 
 
 class Payment(models.Model):
@@ -209,3 +220,43 @@ class CheckIn(models.Model):
 
     def __str__(self):
         return f"{self.client} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+
+class ClientSync(models.Model):
+
+    ACTION_CHOICES = (
+        ("add", "დამატება"),
+        ("delete", "წაშლა"),
+    )
+
+    STATUS_CHOICES = (
+        ("pending", "დასასინქრონიზებელია"),
+        ("done", "დასინქრონდა"),
+        ("error", "შეცდომა"),
+    )
+
+    client = models.ForeignKey(
+        "Client",
+        on_delete=models.CASCADE,
+        related_name="sync_tasks"
+    )
+
+    action = models.CharField(
+        max_length=10,
+        choices=ACTION_CHOICES
+    )
+
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default="pending"
+    )
+
+    error = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.client} • {self.action} • {self.status}"

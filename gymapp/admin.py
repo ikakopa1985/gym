@@ -8,3 +8,5 @@ admin.site.register(Membership)
 admin.site.register(ClientMembership)
 admin.site.register(Payment)
 admin.site.register(CheckIn)
+admin.site.register(ClientSync)
+

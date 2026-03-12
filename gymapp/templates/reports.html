@@ -200,6 +200,24 @@
     </div>
 
   </div>
+
+  <div class="card">
+  <div class="head">
+    <h2>ტრენერების მიხედვით გაყიდვები</h2>
+    <div class="sub">რაოდენობა და თანხა</div>
+  </div>
+
+  <div class="body" id="byTrainerStats">
+
+    <div class="barRow">
+      <div class="name">უტრენერო</div>
+      <div class="num" id="withoutTrainer">0 / 0₾</div>
+    </div>
+
+  </div>
+</div>
+
+
 </div>
 {% endblock %}
 
@@ -432,6 +450,10 @@ async function loadReport(){
 
     renderPayments(data.rows); // შენი არსებული renderPayments მოერგება
 
+    
+
+    calcTrainerStats(data.rows)
+
     // TODO: by_trainer / without trainer — დაამატე შენს UI-ში ბლოკები
   }
 
@@ -461,5 +483,67 @@ async function loadReport(){
   $("f_from").value = isoMonthStart();
   $("f_to").value = isoToday();
   apply();
+
+  function calcTrainerStats(payments){
+
+  const map = new Map()
+
+  let withoutTrainerCount = 0
+  let withoutTrainerSum = 0
+
+  payments.forEach(p=>{
+
+    const trainer = p.trainer_name
+
+    if(!trainer){
+      withoutTrainerCount++
+      withoutTrainerSum += Number(p.amount||0)
+      return
+    }
+
+    if(!map.has(trainer)){
+      map.set(trainer,{count:0,sum:0})
+    }
+
+    const t = map.get(trainer)
+
+    t.count++
+    t.sum += Number(p.amount||0)
+
+  })
+
+
+  const container = $("byTrainerStats")
+
+  container.innerHTML = ""
+
+  map.forEach((v,name)=>{
+
+    const row = document.createElement("div")
+
+    row.className="barRow"
+
+    row.innerHTML = `
+      <div class="name">${name}</div>
+      <div class="num">${v.count} / ${fmtGel(v.sum)}</div>
+    `
+
+    container.appendChild(row)
+
+  })
+
+
+  const row = document.createElement("div")
+
+  row.className="barRow"
+
+  row.innerHTML = `
+    <div class="name">უტრენერო</div>
+    <div class="num">${withoutTrainerCount} / ${fmtGel(withoutTrainerSum)}</div>
+  `
+
+  container.appendChild(row)
+
+}
 </script>
 {% endblock %}
