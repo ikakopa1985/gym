@@ -1,23 +1,26 @@
 import os
-import django
+from gym.settings import ipSettings
 import threading
 from pyzkaccess import ZKAccess
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+import time
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "gym.settings")
-django.setup()
 
 from gymapp.models import *
 
 running = False
 thread = None
 
+ip = ipSettings
+
 def listener():
+    time.sleep(2)
 
     global running
 
-    connstr = "protocol=TCP,ipaddress=172.26.0.245,port=4370,timeout=4000,passwd="
+    connstr = f"""protocol=TCP,ipaddress={ip},port=4370,timeout=4000,passwd="""
     zk = ZKAccess(connstr)
 
     channel_layer = get_channel_layer()
@@ -37,13 +40,8 @@ def listener():
             try:
                 client = Client.objects.get(card_number=card)
                 membership = client.memberships.filter(status="active").first()
-                active_memnarship = ClientMembership.objects.get(client=client, status="active")
-
-
-                print(client)
-                print(active_memnarship.start_date)
-                print(active_memnarship.end_date)
-
+                if membership:
+                    active_memnarship = ClientMembership.objects.get(client=client, status="active")
                 if not membership:
                     data = {
                         "status": "no_membership",
@@ -93,11 +91,8 @@ def process_card(card, channel_layer):
     try:
         client = Client.objects.get(card_number=card)
         membership = client.memberships.filter(status="active").first()
-
-        active_memnarship = ClientMembership.objects.get(client=client, status="active")
-        print(active_memnarship.start_date)
-        print(active_memnarship.end_date)
-
+        if membership:
+            active_memnarship = ClientMembership.objects.get(client=client, status="active")
         if not membership:
 
             data = {
@@ -154,10 +149,9 @@ def start():
 
 def stop():
     print("stopped")
-    imitate()
-    # global running
-
-    # running = False
+    # imitate()
+    global running
+    running = False
 
 
 def imitate():

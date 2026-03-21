@@ -29,6 +29,7 @@ urlpatterns = [
 
     path("zk/start/", zk_start),
     path("zk/stop/", zk_stop),
+    path("zk/imitate/", zk_imitate),
 
 
 

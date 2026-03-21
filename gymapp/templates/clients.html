@@ -146,7 +146,7 @@
         <input class="input" id="c_org" placeholder="Company / Organization">
 
         <label>ბარათის ნომერი</label>
-        <input class="input" id="c_card" placeholder="CARD-001">
+        <input class="input" id="c_card" placeholder="123456789">
 
         <label>ფოტოსურათი</label>
         <input class="input" id="c_photo" type="file" accept="image/*">
@@ -434,7 +434,7 @@
     const gender = $("c_gender").value;
     const email = $("c_email").value.trim();
     const org = $("c_org").value.trim();
-    const card = $("c_card").value.trim();
+    const card = parseInt(document.getElementById("c_card").value.trim()) || 0;
     const photo = $("c_photo").files[0];
     const comment = $("c_comment").value.trim();
 

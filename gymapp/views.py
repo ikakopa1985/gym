@@ -15,7 +15,7 @@ from django.http import JsonResponse
 from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse
-from  gym.services.zk_listener    import start, stop
+from  gym.services.zk_listener    import start, stop, imitate
 from pyzkaccess import ZKAccess, ZK200, ZK100, ZK400
 from pyzkaccess.tables import *
 from datetime import datetime
@@ -24,11 +24,13 @@ from decimal import Decimal
 from django.db.models import DecimalField
 from pyzkaccess.common import ZKDatetimeUtils
 from pyzkaccess.enums import VerifyMode, PassageDirection
+import asyncio
+from gym.settings import ipSettings
 
 from .models import *
 
 
-zktIp = '172.26.0.245'
+zktIp =  ipSettings
 
 
 # =========================
@@ -100,6 +102,7 @@ class ClientSerializer(serializers.ModelSerializer):
             "id",
             "first_name",
             "last_name",
+            "passId",
             "birth_date",
             "gender",
             "phone",
@@ -218,7 +221,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all().order_by("-id")
     serializer_class = ClientSerializer
     filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ["first_name", "last_name", "phone", "email", "organization", "card_number"]
+    search_fields = ["first_name", "passId", "last_name", "phone", "email", "organization", "card_number"]
     ordering_fields = ["id", "created_at", "first_name", "last_name"]
 
     @action(detail=True, methods=["get"])
@@ -481,7 +484,7 @@ class ReportsViewSet(viewsets.ViewSet):
 def OpenDoor(request,ip=zktIp):
     print(1)
     stop()
-    time.sleep(2)
+    asyncio.sleep(2)
     connstr = f"protocol=TCP,ipaddress={ip},port=4370,timeout=4000,passwd="
     try:
         with ZKAccess(connstr=connstr, device_model=ZK200) as zk:
@@ -491,7 +494,7 @@ def OpenDoor(request,ip=zktIp):
         print(str(ex))
         stop()
         return JsonResponse({"status": "error"})
-    time.sleep(2)
+    asyncio.sleep(2)
     start()
     return JsonResponse({"status": "ok"})
 
@@ -507,8 +510,8 @@ def sync(request):
 
 
 def syncpartial(request):
-    start()
-    time.sleep(2)
+    stop()
+    asyncio.sleep(2)
     print("partial sync")
     rows = ClientSync.objects.select_related("client").filter(
         status__in=["pending", "error"]
@@ -536,7 +539,7 @@ def syncpartial(request):
             row.error = str(e)
 
         row.save(update_fields=["status", "error", "synced_at"])
-    time.sleep(3)
+    asyncio.sleep(3)
     start()
     return JsonResponse({"status": "ok"})
 
@@ -637,6 +640,13 @@ def zk_start(request):
 def zk_stop(request):
 
     stop()
+    return JsonResponse({"status": "stopped"})
+
+
+
+def zk_imitate(request):
+
+    imitate()
     return JsonResponse({"status": "stopped"})
 
 

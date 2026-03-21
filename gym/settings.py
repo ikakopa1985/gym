@@ -86,23 +86,14 @@ WSGI_APPLICATION = 'gym.wsgi.application'
 
 from pathlib import Path
 
-dashipruli = True
+dashipruli = False
 
-if dashipruli:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': Path(r'C:\kopaGym\db.sqlite3'),
-        }
-    }
-else:
-    DATABASES = {
+DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -149,3 +140,10 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 
+
+
+
+
+
+ipSettings = "172.26.0.245"
+# ipSettings = "192.168.10.225"

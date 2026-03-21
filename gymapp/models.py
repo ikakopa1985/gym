@@ -117,6 +117,8 @@ class Client(models.Model):
     first_name = models.CharField("სახელი", max_length=100)
     last_name = models.CharField("გვარი", max_length=100)
 
+    passId = models.CharField(max_length=100, null=True, blank=True)
+
     birth_date = models.DateField("დაბადების თარიღი", null=True, blank=True)
     gender = models.CharField("სქესი", max_length=10, choices=GENDER_CHOICES, null=True, blank=True)
 
@@ -126,7 +128,7 @@ class Client(models.Model):
 
     card_number = models.CharField("ბარათის ნომერი", max_length=50, blank=True, unique=True)
 
-    photo = models.ImageField("ფოტოსურათი", upload_to="clients/photos/", null=True, blank=True)
+    photo = models.ImageField("ფოტოსურათი", upload_to="Clients Pictures/", null=True, blank=True)
 
     comment = models.TextField("კომენტარი", blank=True, default="")  # ✅ დაამატე
 
