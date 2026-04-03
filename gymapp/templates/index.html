@@ -181,7 +181,7 @@
       <div class="head">
         <div>
           <h2>კლიენტების სია</h2>
-          <div class="sub">ძებნა ტელეფონით, სახელით ან გვარით • Check-in ვადის შემოწმებით</div>
+          <div class="sub">ძებნა სახელით, გვარით, ბარათის ნომრით და პირადი ნომრით • Check-in ვადის შემოწმებით</div>
         </div>
 
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -195,7 +195,7 @@
         <div class="searchRow">
           <div class="field">
             <span>🔎</span>
-            <input id="q" placeholder="მაგ: 555123456 ან 'გიორგი'..." autocomplete="off" />
+            <input id="q" placeholder="მაგ: გიორგი, 01017043857, 123456 ან ბარათის ნომერი..." autocomplete="off" />
           </div>
           <button class="btn primary" id="btnSearch" type="button">ძებნა</button>
           <button class="btn" id="btnReset" type="button">გასუფთავება</button>
@@ -292,10 +292,10 @@
           <button class="btn primary" style="width:100%; justify-content:center" id="btnQuickCheckin" type="button">
             ✅ კარის გაღება
           </button>
-          <button class="btn" style="width:100%; justify-content:center; margin-top:10px" type="button" id="btnRefresh" >
+          <button class="btn" style="width:100%; justify-content:center; display: none; margin-top:10px" type="button" id="btnRefresh" >
             🔄 განახლება
           </button>
-            <button class="btn danger"  style="width:100%; justify-content:center; margin-top:10px" type="button" id="btnExpiredList">
+            <button class="btn danger"  style="width:100%; justify-content:center; display: none; margin-top:10px" type="button" id="btnExpiredList">
               ⛔ ვადაგასულების ნახვა
             </button>
 
@@ -563,28 +563,37 @@ socket.onmessage = function(e){
     });
   }
 
-  function applySearch(){
-    const q = ($("q").value || "").trim().toLowerCase();
-    let list = clientsCache.slice();
+  async function applySearch(){
+    const q = ($("q").value || "").trim();
 
-    if(q){
-      list = list.filter(c=>{
-        const full = `${c.first_name || ""} ${c.last_name || ""}`.toLowerCase();
-        return full.includes(q) || String(c.phone || "").includes(q);
-      });
+    // თუ ცარიელია — არაფერი აჩვენოს
+    if(!q){
+      clientsCache = [];
+      renderClients([]);
+      return;
     }
+
+    let url = `/api/clients/?search=${encodeURIComponent(q)}`;
+
+    const res = await fetch(url);
+    if(!res.ok){
+      toast("bad","შეცდომა","კლიენტები ვერ მოიძებნა");
+      return;
+    }
+
+    let data = await res.json();
+
+    // თუ pagination გაქვს DRF-ში
+    if (data.results) {
+      data = data.results;
+    }
+
     if(onlyExpiredMode){
-      list = list.filter(c => !c.active_membership_id);
+      data = data.filter(c => !c.active_membership_id);
     }
-    renderClients(list);
-  }
 
-  async function syncall(){
-    const res = await fetch("/sync/", {
-      method: "POST",
-      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
-      body: JSON.stringify({ client: 0 })
-    });
+    clientsCache = data;
+    renderClients(data);
   }
 
 
@@ -663,26 +672,89 @@ async function sync(){
   $("chipExpired").textContent = `ვადაგასული: ${Number(s.expired_memberships || 0)}`;
 }
 
-  async function doCheckinByClientId(clientId){
-    const res = await fetch("/api/checkins/", {
-      method: "POST",
-      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
-      body: JSON.stringify({ client: clientId })
-    });
+async function doCheckinByClientId(clientId){
+  const res = await fetch("/api/checkins/", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": csrftoken
+    },
+    body: JSON.stringify({ client: clientId })
+  });
 
-    let data = {};
-    try{ data = await res.json(); }catch(e){}
+  let data = {};
+  try { data = await res.json(); } catch(e) {}
 
-    if(!res.ok){
-      toast("bad","ვერ შესრულდა", data.detail || "აბონემენტი ვადაგასულია ან არ აქვს აქტიური");
+  const client = clientsCache.find(x => Number(x.id) === Number(clientId));
+
+  const nameEl = document.getElementById("name");
+  const photoEl = document.getElementById("photo");
+  const cardEl = document.getElementById("card");
+  const membershipEl = document.getElementById("membership");
+  const statusEl = document.getElementById("status");
+  const dialogEl = document.getElementById("card-info");
+
+  if (!nameEl || !photoEl || !cardEl || !membershipEl || !statusEl || !dialogEl) {
+    if (!res.ok) {
+      toast("bad", "ვერ შესრულდა", data.detail || "შეცდომა");
       return;
     }
-
-    toast("ok","OK","Check-in დაფიქსირდა ✅");
-    await loadClients();
-    await loadPayments();
-    await loadSummary();
+    toast("ok", "OK", "Check-in დაფიქსირდა ✅");
+    return;
   }
+
+  const photoValue = client?.photo || "";
+  if (photoValue) {
+    if (
+      String(photoValue).startsWith("http://") ||
+      String(photoValue).startsWith("https://") ||
+      String(photoValue).startsWith("/")
+    ) {
+      photoEl.src = photoValue;
+    } else {
+      photoEl.src = "/media/" + photoValue;
+    }
+  } else {
+    photoEl.src = "/static/no-photo.jpg";
+  }
+
+  nameEl.innerText = `${client?.first_name || ""} ${client?.last_name || ""}`.trim();
+  cardEl.innerText = "Card: " + (client?.card_number || "—");
+
+  if (!res.ok) {
+    membershipEl.innerText = "NO ACTIVE MEMBERSHIP";
+    statusEl.innerText = "⛔ DENIED";
+    statusEl.style.color = "#ff3b3b";
+
+    dialogEl.classList.add("show");
+
+    if (window.cardTimer) clearTimeout(window.cardTimer);
+    window.cardTimer = setTimeout(() => {
+      dialogEl.classList.remove("show");
+    }, 5000);
+
+    toast("bad", "ვერ შესრულდა", data.detail || "აბონემენტი ვადაგასულია ან არ აქვს აქტიური");
+    return;
+  }
+
+  membershipEl.innerText =
+    "Valid until: " +
+    (data?.client_membership?.start_date || "—") +
+    "   " +
+    (data?.client_membership?.end_date || "—");
+
+  statusEl.innerText = "✅ ACTIVE";
+  statusEl.style.color = "#2ecc71";
+
+  dialogEl.classList.add("show");
+
+  if (window.cardTimer) clearTimeout(window.cardTimer);
+  window.cardTimer = setTimeout(() => {
+    dialogEl.classList.remove("show");
+  }, 5000);
+
+  toast("ok", "OK", "Check-in დაფიქსირდა ✅");
+}
 
   async function doorOpen(){
     const res = await fetch("/doorOpen/", {
@@ -693,22 +765,43 @@ async function sync(){
   }
 
   // ===== Client modal
-  function openClientModal(id){
-    const c = clientsCache.find(x => Number(x.id) === Number(id));
-    if(!c) return;
-    selectedClientId = id;
+async function openClientModal(id){
+  const c = clientsCache.find(x => Number(x.id) === Number(id));
+  if(!c) return;
 
-    $("mTitle").textContent = `${c.first_name || ""} ${c.last_name || ""}`.trim();
-    $("mKV").innerHTML = `
-      <div>ტელეფონი</div><div>${c.phone || "—"}</div>
-      <div>ელ.ფოსტა</div><div>${c.email || "—"}</div>
-      <div>ორგანიზაცია</div><div>${c.organization || "—"}</div>
-      <div>ბარათი</div><div>${c.card_number || "—"}</div>
-      <div>აქტიური აბონემენტი</div><div>${c.active_membership_id ? "ID: " + c.active_membership_id : "—"}</div>
-      <div>სტატუსი</div><div>${c.is_active ? "აქტიურია" : "ვადაგასულია"}</div>
-    `;
-    $("overlay").classList.add("show");
+  selectedClientId = id;
+
+  let activeMembershipText = "—";
+  let activePeriodText = "—";
+
+  try{
+    const res = await fetch(`/api/clients/${id}/memberships/`);
+    if(res.ok){
+      const memberships = await res.json();
+      const active = (memberships || []).find(m => m.is_active || m.status === "active");
+
+      if(active){
+        activeMembershipText = active.membership_name || `ID: ${active.membership}`;
+        activePeriodText = `${active.start_date || "—"} - ${active.end_date || "—"}`;
+      }
+    }
+  }catch(e){
+    console.log(e);
   }
+
+  $("mTitle").textContent = `${c.first_name || ""} ${c.last_name || ""}`.trim();
+  $("mKV").innerHTML = `
+    <div>ტელეფონი</div><div>${c.phone || "—"}</div>
+    <div>ელ.ფოსტა</div><div>${c.email || "—"}</div>
+    <div>ორგანიზაცია</div><div>${c.organization || "—"}</div>
+    <div>ბარათი</div><div>${c.card_number || "—"}</div>
+    <div>აქტიური აბონემენტი</div><div>${activeMembershipText}</div>
+    <div>აქტიურია პერიოდით</div><div>${activePeriodText}</div>
+    <div>სტატუსი</div><div>${c.is_active ? "აქტიურია" : "ვადაგასულია"}</div>
+  `;
+
+  $("overlay").classList.add("show");
+}
 
   function closeClientModal(){ $("overlay").classList.remove("show"); }
 
@@ -730,45 +823,48 @@ async function sync(){
 
   $("phGoPayments").addEventListener("click", ()=>{ window.location.href = "/payments/"; });
 
-  function openPayHistoryByClientId(clientId){
-    const c = clientsCache.find(x => Number(x.id) === Number(clientId));
-    const clientName = c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() : `ID: ${clientId}`;
+  async function openPayHistoryByClientId(clientId){
+  const c = clientsCache.find(x => Number(x.id) === Number(clientId));
+  const clientName = c ? `${c.first_name || ""} ${c.last_name || ""}`.trim() : `ID: ${clientId}`;
 
-    const list = paymentsCache
-      .filter(p => String(p.client) === String(clientId))
-      .sort((a,b)=> Number(b.id) - Number(a.id));
-
-    $("phTitle").textContent = `გადახდების ისტორია • ${clientName}`;
-    $("phKV").innerHTML = `
-      <label>კლიენტი</label><div>${clientName}</div>
-      <label>ჩანაწერები</label><div class="mono">${list.length}</div>
-    `;
-
-    $("phSub").textContent = `კლიენტის ყველა გადახდა (ტრენერი/თარიღი/ფიქსირებული პერიოდი/თანხები)`;
-
-    const sum = list.reduce((acc, x)=> acc + Number(x.amount || 0), 0);
-    $("phSum").textContent = `${fmtMoney(sum)}₾`;
-
-    const tb = $("phTbody");
-    tb.innerHTML = "";
-    list.forEach(x=>{
-      const fixed = (x.fixed_start || x.fixed_end) ? `${x.fixed_start || "—"} → ${x.fixed_end || "—"}` : "—";
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${fmtDT(x.operation_date || x.created_at)}</td>
-        <td>${x.trainer_name || "—"}</td>
-        <td>${x.membership_name || "—"}</td>
-        <td>${fixed}</td>
-        <td>${fmtMoney(x.membership_amount)}₾</td>
-        <td>${fmtMoney(x.trainer_fee)}₾</td>
-        <td style="font-weight:900">${fmtMoney(x.amount)}₾</td>
-        <td>${x.method || "—"}</td>
-      `;
-      tb.appendChild(tr);
-    });
-
-    overlayPayHistory.classList.add("show");
+  const res = await fetch(`/api/reports/payments/?client=${clientId}`);
+  if(!res.ok){
+    toast("bad", "შეცდომა", "გადახდების ისტორია ვერ ჩაიტვირთა");
+    return;
   }
+
+  const data = await res.json();
+  const list = (data.rows || []).sort((a,b)=> Number(b.id) - Number(a.id));
+
+  // აქ შეგიძლია render გააკეთო (თუ უკვე არ გაქვს ქვემოთ)
+
+  $("phTitle").textContent = clientName + " • გადახდები";
+  $("phTbody").innerHTML = "";
+
+  let sum = 0;
+
+  list.forEach(p=>{
+    sum += Number(p.amount || 0);
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${fmtDT(p.operation_date)}</td>
+      <td>${p.trainer_name || "—"}</td>
+      <td>${p.membership_name || "—"}</td>
+      <td>${p.fixed_start || "—"} - ${p.fixed_end || "—"}</td>
+      <td>${fmtMoney(p.membership_amount)}</td>
+      <td>${fmtMoney(p.trainer_fee)}</td>
+      <td>${fmtMoney(p.amount)}</td>
+      <td>${p.method || "—"}</td>
+    `;
+    $("phTbody").appendChild(tr);
+  });
+
+  $("phSum").textContent = fmtMoney(sum) + "₾";
+  $("phSub").textContent = `${list.length} ჩანაწერი`;
+
+  overlayPayHistory.classList.add("show");
+}
 
   
 
@@ -782,7 +878,12 @@ async function sync(){
 
   // ===== top events
   $("btnSearch").addEventListener("click", ()=> applySearch());
-  $("btnReset").addEventListener("click", ()=> { $("q").value=""; applySearch(); });
+  $("btnReset").addEventListener("click", ()=> {
+    $("q").value = "";
+    clientsCache = [];
+    onlyExpiredMode = false;
+    renderClients([]);
+  });
   $("btnExpiredList").addEventListener("click", ()=> { onlyExpiredMode = true; applySearch(); });
   $("btnsyncall").addEventListener("click", ()=> { syncall() });
   $("btnsync").addEventListener("click", ()=> { sync() });
@@ -853,12 +954,11 @@ async function checkSyncStatus(){
 }
 
   // init
-  (async ()=>{
-    await loadClients();
-    await loadPayments();
-    await loadSummary();
-    await checkSyncStatus();
-  })();
+(async ()=>{
+  renderClients([]);
+  await loadSummary();
+  await checkSyncStatus();
+})();
 </script>
 
 {% endblock %}

@@ -26,6 +26,7 @@ from pyzkaccess.common import ZKDatetimeUtils
 from pyzkaccess.enums import VerifyMode, PassageDirection
 import asyncio
 from gym.settings import ipSettings
+from django.db.models import Prefetch
 
 from .models import *
 
@@ -117,12 +118,11 @@ class ClientSerializer(serializers.ModelSerializer):
         ]
 
     def get_active_membership_id(self, obj):
-        cm = obj.memberships.filter(status="active").order_by("-created_at").first()
+        cm = obj.active_membership
         return cm.id if cm else None
 
     def get_is_active(self, obj):
-        cm = obj.memberships.filter(status="active").order_by("-created_at").first()
-        return cm is not None
+        return obj.active_membership is not None
 
 
 class ClientMembershipSerializer(serializers.ModelSerializer):
@@ -221,7 +221,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all().order_by("-id")
     serializer_class = ClientSerializer
     filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ["first_name", "passId", "last_name", "phone", "email", "organization", "card_number"]
+    search_fields = ["first_name", "last_name", "email", "organization", "card_number"]
     ordering_fields = ["id", "created_at", "first_name", "last_name"]
 
     @action(detail=True, methods=["get"])
@@ -481,11 +481,11 @@ class ReportsViewSet(viewsets.ViewSet):
         })
 
 
-def OpenDoor(request,ip=zktIp):
-    print(1)
+def OpenDoor(request):
     stop()
-    asyncio.sleep(2)
-    connstr = f"protocol=TCP,ipaddress={ip},port=4370,timeout=4000,passwd="
+    # asyncio.sleep(1)
+    time.sleep(1)
+    connstr = f"protocol=TCP,ipaddress={zktIp},port=4370,timeout=4000,passwd="
     try:
         with ZKAccess(connstr=connstr, device_model=ZK200) as zk:
             zk.doors[0].relays.switch_on(4)
@@ -494,7 +494,8 @@ def OpenDoor(request,ip=zktIp):
         print(str(ex))
         stop()
         return JsonResponse({"status": "error"})
-    asyncio.sleep(2)
+    # asyncio.sleep(1)
+    time.sleep(1)
     start()
     return JsonResponse({"status": "ok"})
 
@@ -511,7 +512,8 @@ def sync(request):
 
 def syncpartial(request):
     stop()
-    asyncio.sleep(2)
+    # asyncio.sleep(2)
+    time.sleep(2)
     print("partial sync")
     rows = ClientSync.objects.select_related("client").filter(
         status__in=["pending", "error"]
@@ -539,7 +541,8 @@ def syncpartial(request):
             row.error = str(e)
 
         row.save(update_fields=["status", "error", "synced_at"])
-    asyncio.sleep(3)
+    # asyncio.sleep(3)
+    time.sleep(2)
     start()
     return JsonResponse({"status": "ok"})
 
@@ -988,17 +991,17 @@ class CheckInViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "created_at"]
 
     def create(self, request, *args, **kwargs):
-        print(1)
+        # print(1)
         client_id = request.data.get("client")
         if not client_id:
             return Response({"detail": "client აუცილებელია"}, status=400)
 
         try:
-            print(2)
+            # print(2)
             client = Client.objects.get(id=client_id)
         except Client.DoesNotExist:
             return Response({"detail": "client ვერ მოიძებნა"}, status=404)
-        print(3)
+        # print(3)
         cm = client.active_membership
         if not cm:
             return Response({"detail": "კლიენტს არ აქვს აქტიური აბონემენტი"}, status=403)
@@ -1012,12 +1015,17 @@ class CheckInViewSet(viewsets.ModelViewSet):
         # insertor_update_new_user(pin="101", card='123456', password='4321')
         # delete_user("123456")
         # del_logs()
-        get_logs_users()
+        # get_logs_users()
         # get_logs_UserAuthorize()
         # sync()
-
         checkin = CheckIn.objects.create(client=client)
-        return Response(CheckInSerializer(checkin).data, status=status.HTTP_201_CREATED)
+        OpenDoor(request)
+
+        return Response({
+            "checkin": CheckInSerializer(checkin).data,
+            "client": ClientSerializer(client).data,
+            "client_membership": ClientMembershipSerializer(cm).data,
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"])
     def quick(self, request):
@@ -1028,7 +1036,14 @@ class CheckInViewSet(viewsets.ModelViewSet):
             return Response({"detail": "მიუთითე card_number ან phone"}, status=400)
 
         qs = Client.objects.all()
-        qs = qs.filter(card_number=card) if card else qs.filter(phone=phone)
+
+        if card:
+            qs = qs.filter(
+                Q(card_number__icontains=card) |
+                Q(passId__icontains=card)
+            )
+        elif phone:
+            qs = qs.filter(phone__icontains=phone)
 
         client = qs.first()
         if not client:
@@ -1045,6 +1060,7 @@ class CheckInViewSet(viewsets.ModelViewSet):
             cm.save(update_fields=["remaining_visits", "status"])
 
         checkin = CheckIn.objects.create(client=client)
+        OpenDoor()
         return Response({
             "checkin": CheckInSerializer(checkin).data,
             "client": ClientSerializer(client).data,

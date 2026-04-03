@@ -58,7 +58,6 @@
 
   .tdActions{white-space:nowrap; display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
 
-  /* modal body spacing */
   .mbody .kv{grid-template-columns:180px 1fr}
   @media (max-width: 760px){
     .kv{grid-template-columns:1fr}
@@ -73,7 +72,7 @@
     <div class="head">
       <div>
         <h2>კლიენტების სია</h2>
-        <div class="sub">ძებნა ტელეფონით/სახელით/გვარით/ბარათის ნომრით</div>
+        <div class="sub">ძებნა ტელეფონით/სახელით/გვარით/passId-ით/ბარათის ნომრით</div>
       </div>
       <div class="row">
         <span class="pill" id="countPill">0 კლიენტი</span>
@@ -85,7 +84,7 @@
       <div class="row">
         <div class="field" style="flex:1;min-width:260px;">
           <span>🔎</span>
-          <input id="q" placeholder="მაგ: 555... / გიორგი / CARD-001" autocomplete="off">
+          <input id="q" placeholder="მაგ: პირადი ნომერი / 555... / გიორგი / CARD-001" autocomplete="off">
         </div>
         <button class="btn primary" id="btnSearch" type="button">ძებნა</button>
         <button class="btn" id="btnReset" type="button">გასუფთავება</button>
@@ -97,9 +96,10 @@
           <thead>
             <tr>
               <th style="width:34%">კლიენტი</th>
-              <th style="width:18%">ტელეფონი</th>
-              <th style="width:18%">ელ. ფოსტა</th>
-              <th style="width:20%">ორგანიზაცია</th>
+              <th style="width:16%">passId</th>
+              <th style="width:16%">ტელეფონი</th>
+              <th style="width:14%">ელ. ფოსტა</th>
+              <th style="width:10%">ორგანიზაცია</th>
               <th style="width:10%">ქმედება</th>
             </tr>
           </thead>
@@ -110,7 +110,6 @@
   </div>
 </div>
 
-<!-- New/Edit Client Modal -->
 <div class="modalOverlay" id="overlayNew">
   <div class="modal">
     <div class="mhead">
@@ -124,6 +123,9 @@
 
         <label>გვარი *</label>
         <input class="input" id="c_last" placeholder="კაპანაძე">
+
+        <label>passId / პირადი ნომერი *</label>
+        <input class="input" id="c_passid" placeholder="01017043857">
 
         <label>დაბ. თარიღი</label>
         <input class="input" id="c_birth" type="date">
@@ -150,6 +152,7 @@
 
         <label>ფოტოსურათი</label>
         <input class="input" id="c_photo" type="file" accept="image/*">
+
         <label>კომენტარი</label>
         <textarea class="input" id="c_comment" rows="3" placeholder="შენიშვნა კლიენტზე..."></textarea>
       </div>
@@ -165,7 +168,6 @@
   </div>
 </div>
 
-<!-- View Modal -->
 <div class="modalOverlay" id="overlayView">
   <div class="modal">
     <div class="mhead">
@@ -219,7 +221,7 @@
     if(!v) return null;
     if(String(v).startsWith("http://") || String(v).startsWith("https://")) return v;
     if(String(v).startsWith("/")) return v;
-    return "/" + v;
+    return "/media/" + v;
   }
 
   function avatarHtml(photo){
@@ -229,7 +231,7 @@
   }
 
   function clearForm(){
-    ["c_first","c_last","c_phone","c_email","c_org","c_card","c_comment"].forEach(id=>$(id).value="");
+    ["c_first","c_last","c_passid","c_phone","c_email","c_org","c_card","c_comment"].forEach(id=>$(id).value="");
     $("c_birth").value="";
     $("c_gender").value="";
     $("c_photo").value="";
@@ -238,13 +240,14 @@
   function fillForm(c){
     $("c_first").value = c.first_name || "";
     $("c_last").value  = c.last_name || "";
+    $("c_passid").value = c.passId || "";
     $("c_phone").value = c.phone || "";
     $("c_email").value = c.email || "";
     $("c_org").value   = c.organization || "";
     $("c_card").value  = c.card_number || "";
     $("c_birth").value = c.birth_date || "";
     $("c_gender").value = c.gender || "";
-    $("c_comment").value = c.comment || "";   // ✅
+    $("c_comment").value = c.comment || "";
     $("c_photo").value = "";
   }
 
@@ -269,6 +272,7 @@
             </div>
           </div>
         </td>
+        <td>${c.passId || "—"}</td>
         <td>${c.phone || "—"}</td>
         <td>${c.email || "—"}</td>
         <td>${c.organization || "—"}</td>
@@ -301,32 +305,31 @@
       const full = (`${c.first_name||""} ${c.last_name||""}`).toLowerCase();
       const phone = (c.phone||"").toLowerCase();
       const card = (c.card_number||"").toLowerCase();
-      return full.includes(q) || phone.includes(q) || card.includes(q);
+      const passId = (c.passId||"").toLowerCase();
+      return full.includes(q) || phone.includes(q) || card.includes(q) || passId.includes(q);
     });
   }
 
   async function loadClients(q=""){
-    const url = q ? `/api/clients/?search=${encodeURIComponent(q)}` : "/api/clients/";
-    let res = await fetch(url);
+    q = (q || "").trim();
 
-    if(!res.ok && q){
-      res = await fetch("/api/clients/");
-      if(!res.ok){
-        toast("bad","შეცდომა","კლიენტების ჩამოტვირთვა ვერ მოხერხდა.");
-        return;
-      }
-      const all = await res.json();
-      renderRows(all);
-      renderRows(localFilter(q));
+    if(!q){
+      lastLoaded = [];
+      renderRows([]);
       return;
     }
+
+    const url = `/api/clients/?search=${encodeURIComponent(q)}`;
+    const res = await fetch(url);
 
     if(!res.ok){
       toast("bad","შეცდომა","კლიენტების ჩამოტვირთვა ვერ მოხერხდა.");
       return;
     }
 
-    const data = await res.json();
+    let data = await res.json();
+    if(data.results) data = data.results;
+
     renderRows(data);
   }
 
@@ -350,11 +353,13 @@
       </div>
 
       <div class="kv">
+        <label>passId / პირადი ნომერი</label><div>${c.passId || "—"}</div>
         <label>დაბ. თარიღი</label><div>${c.birth_date || "—"}</div>
         <label>სქესი</label><div>${genderLabel(c.gender)}</div>
         <label>ორგანიზაცია</label><div>${c.organization || "—"}</div>
         <label>ბარათის ნომერი</label><div>${c.card_number || "—"}</div>
         <label>სტატუსი</label><div>${(c.is_active === true) ? "აქტიურია" : ((c.is_active === false) ? "ვადაგასულია" : "—")}</div>
+        <label>კომენტარი</label><div>${c.comment || "—"}</div>
       </div>
 
       <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
@@ -412,29 +417,35 @@
   }
 
   $("btnSearch").addEventListener("click", ()=> loadClients($("q").value));
-  $("btnReset").addEventListener("click", ()=> { $("q").value=""; loadClients(""); });
+  $("btnReset").addEventListener("click", ()=> {
+    $("q").value = "";
+    lastLoaded = [];
+    renderRows([]);
+  });
   $("q").addEventListener("keydown", (e)=>{ if(e.key==="Enter") loadClients($("q").value); });
 
   $("btnSave").addEventListener("click", async ()=>{
     const first_name = $("c_first").value.trim();
     const last_name  = $("c_last").value.trim();
-    const phone      = $("c_phone").value.trim();
+    const passId = $("c_passid").value.trim();
+    const phone = $("c_phone").value.trim();
 
-    if(!first_name || !last_name || !phone){
-      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, ტელეფონი.");
+    if(!first_name || !last_name || !phone || !passId){
+      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, passId, ტელეფონი.");
       return;
     }
 
     const fd = new FormData();
     fd.append("first_name", first_name);
     fd.append("last_name", last_name);
+    fd.append("passId", passId);
     fd.append("phone", phone);
 
     const birth = $("c_birth").value;
     const gender = $("c_gender").value;
     const email = $("c_email").value.trim();
     const org = $("c_org").value.trim();
-    const card = parseInt(document.getElementById("c_card").value.trim()) || 0;
+    const card = $("c_card").value.trim();
     const photo = $("c_photo").files[0];
     const comment = $("c_comment").value.trim();
 
@@ -444,8 +455,7 @@
     if(org) fd.append("organization", org);
     if(card) fd.append("card_number", card);
     if(photo) fd.append("photo", photo);
-    if(comment) fd.append("comment", comment);
-    else fd.append("comment", ""); // სურვილისამებრ, რომ ცარიელი წაშლაც იმუშაოს
+    fd.append("comment", comment);
 
     const url = editId ? `/api/clients/${editId}/` : "/api/clients/";
     const methodHttp = editId ? "PATCH" : "POST";
@@ -460,6 +470,7 @@
       let err = {};
       try{ err = await res.json(); }catch(e){}
       const msg = err.detail
+        || (err.passId && err.passId[0])
         || (err.card_number && err.card_number[0])
         || (err.phone && err.phone[0])
         || JSON.stringify(err)
@@ -475,7 +486,6 @@
     await loadClients($("q").value.trim());
   });
 
-  // init
-  loadClients("");
+  renderRows([]);
 </script>
 {% endblock %}

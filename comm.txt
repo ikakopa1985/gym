@@ -1,3 +1,11 @@
+
+cd C:\Users\ikopaliani2707\Desktop\gym\python 32 bit\.env\Scripts
+activate
+cd C:\Users\ikopaliani2707\Desktop\gym\gym
+watchmedo auto-restart --patterns="*.py" --recursive -- python -m daphne gym.asgi:application
+
+
+
 cd C:\Users\ikopaliani2707\Desktop\gym\python 32 bit\.env\Scripts
 activate
 cd C:\Users\ikopaliani2707\Desktop\gym\gym
@@ -13,11 +21,6 @@ python.exe -m pip install pyzkaccess
 
 python -m daphne gym.asgi:application
 
-
-cd C:\Users\ikopaliani2707\Desktop\gym\python 32 bit\.env\Scripts
-activate
-cd C:\Users\ikopaliani2707\Desktop\gym\gym
-watchmedo auto-restart --patterns="*.py" --recursive -- python -m daphne gym.asgi:application
 
 
 @echo off
@@ -64,3 +67,27 @@ http://192.168.10.225/login.html
 
 
     Client.objects.all().delete()
+
+
+
+ settings.py შია აიპი ჩასაასწორებელი
+
+
+python manage.py import_clients import_client.xlsx
+
+
+
+206968826
+
+Qweqwe1!
+
+
+
+
+1. ბაზაში გვარები არასწორად არის ბევრის და არ იძებნება მომხმარებელი
+2. თუ არის შესაძლებელი მთავარ გვერდზე სადაც შემოსული ნაღდი, ტერმინალის თანხები წერია იმდღის გაყიდული აბონიმენტების რაოდენობაც ეწეროს.
+3. ბარათის დაკარგვის შემთხვევაში 10 ლარს იხდიან და პროგრამაში სად მიუთითო ვერ ვნახე.
+4. თუ არის შესაძლებელი ახალი კლიენტის დამატების შემდეგ თავისით გადავიდეს გადახდაზე.
++ 5. გადახდის რიცხვი გავაკეთე წინა დღით (ვითომ შეყვანა დამავიწყდა) მაინც იმდღეს გაატარა გადახდა
++ 6. არ ჩანს აბონიმენტი რომელ რიცხვამდე არის აქტიური (ან შეიძლება მე ვერ ვნახე😊)
++ 7. აბონიმენტი რომ შევიყვანე იქ მაქვს მითითებული 29 დღე და თავისით სწორად წერდა დამთავრების თარიღს და ეხლა რაც ახალი თვე დაიწყო 30 დღეს აკეთებს და დამთავრების თრიღი აღარ ემთხვევა.

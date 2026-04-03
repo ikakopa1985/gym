@@ -79,7 +79,7 @@
     <div class="head">
       <div>
         <h2>გადახდა</h2>
-        <div class="sub">კლიენტის ძებნა dropdown-ით • + ღილაკით კლიენტის დამატება • ოპერაციის თარიღი რედაქტირებადია</div>
+        <div class="sub">კლიენტის ძებნა dropdown-ით • passId-ითაც ძებნა • + ღილაკით კლიენტის დამატება • ოპერაციის თარიღი რედაქტირებადია</div>
       </div>
       <div class="row">
         <button class="btn" id="btnReload" type="button">🔄 განახლება</button>
@@ -91,7 +91,7 @@
         <label>კლიენტი *</label>
         <div style="display:flex;gap:10px;align-items:center;width:100%">
           <div class="combo" style="flex:1">
-            <input class="comboInput" id="p_client_search" placeholder="დაწერე: სახელი / გვარი / ტელეფონი / ბარათი...">
+            <input class="comboInput" id="p_client_search" placeholder="დაწერე: სახელი / გვარი / ტელეფონი / passId / ბარათი...">
             <div class="comboList" id="p_client_list"></div>
           </div>
           <button class="btn primary" id="btnOpenNewClient" type="button" title="ახალი კლიენტი">＋</button>
@@ -151,12 +151,20 @@
   </div>
 
   <!-- History -->
-  <div class="card">
-    <div class="head">
+<div class="card">
+  <div class="head">
+    <div>
       <h2>გადახდების ისტორია</h2>
-      <div class="sub">operation_date ჩანს ცხრილში • Edit/Delete</div>
+      <div class="sub">ნაგულისხმევად ჩანს მხოლოდ დღევანდელი გადახდები • ძებნა გვარით / პირადი ნომრით / ბარათის ნომრით</div>
     </div>
-    <div class="body">
+  </div>
+  <div class="body">
+
+    <div class="row" style="margin-bottom:12px">
+      <input class="input" id="pay_search" placeholder="ძებნა: გვარი / პირადი ნომერი / ბარათის ნომერი">
+      <button class="btn primary" id="btnPaySearch" type="button">ძებნა</button>
+      <button class="btn" id="btnPaySearchReset" type="button">გასუფთავება</button>
+    </div>
       <div class="tableWrap" style="max-height:520px; overflow:auto;">
         <table>
           <thead>
@@ -191,7 +199,16 @@
     <div class="mbody">
       <div class="kv">
         <label>კლიენტი *</label>
-        <select class="input" id="e_client"></select>
+        <div style="display:flex;gap:10px;align-items:center;width:100%">
+          <div class="combo" style="flex:1">
+            <input class="comboInput" id="e_client_search" placeholder="დაწერე: სახელი / გვარი / ტელეფონი / passId / ბარათი...">
+            <div class="comboList" id="e_client_list"></div>
+          </div>
+        </div>
+
+        <label>არჩეული კლიენტი</label>
+        <input class="input" id="e_client_label" disabled value="—">
+        <input type="hidden" id="e_client_id">
 
         <label>ოპერაციის თარიღი</label>
         <input class="input" id="e_operation_date" type="datetime-local">
@@ -248,6 +265,9 @@
         <label>გვარი *</label>
         <input class="input" id="nc_last" placeholder="კაპანაძე">
 
+        <label>passId / პირადი ნომერი *</label>
+        <input class="input" id="nc_passid" placeholder="01017043857">
+
         <label>დაბ. თარიღი</label>
         <input class="input" id="nc_birth" type="date">
 
@@ -293,10 +313,13 @@
 <script>
   const $ = (id)=>document.getElementById(id);
 
+
+
   let clientsCache = [];
   let membershipsCache = [];
   let trainersCache = [];
   let paymentsCache = [];
+  let editClientsCache = [];
   let editingId = null;
 
   let pTotalOverridden = false;
@@ -331,6 +354,11 @@
   function fmtDT(iso){
     if(!iso) return "—";
     return String(iso).slice(0,19).replace("T"," ");
+  }
+
+  function todayStr(){
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   }
 
   function parseNum(v){
@@ -383,12 +411,17 @@
   const clientLabel = $("p_client_label");
   const clientIdHidden = $("p_client_id");
   const clientCommentBox = $("p_client_comment");
+  const editClientSearch = $("e_client_search");
+  const editClientList = $("e_client_list");
+  const editClientLabel = $("e_client_label");
+  const editClientIdHidden = $("e_client_id");
 
   function clientText(c){
     const full = `${c.first_name||""} ${c.last_name||""}`.trim();
+    const passId = c.passId || "";
     const phone = c.phone || "";
     const card = c.card_number || "";
-    return `${full} • ${phone}${card ? " • " + card : ""}`;
+    return `${full}${passId ? " • " + passId : ""}${phone ? " • " + phone : ""}${card ? " • " + card : ""}`;
   }
 
   function setSelectedClient(c){
@@ -399,23 +432,95 @@
     hideClientList();
   }
 
+
+  function setSelectedEditClient(c){
+    editClientIdHidden.value = c ? String(c.id) : "";
+    editClientLabel.value = c ? clientText(c) : "—";
+    editClientSearch.value = c ? clientText(c) : "";
+    hideEditClientList();
+  }
+
+  function showEditClientList(){ editClientList.classList.add("show"); }
+  function hideEditClientList(){ editClientList.classList.remove("show"); }
+
+  function renderEditClientList(filterText=""){
+    const q = (filterText || "").trim().toLowerCase();
+
+    if(!q){
+      editClientList.innerHTML = "";
+      hideEditClientList();
+      return;
+    }
+
+    const items = editClientsCache.slice(0, 60);
+
+    editClientList.innerHTML = items.map(c=>`
+      <div class="comboItem" data-id="${c.id}">
+        <div>
+          <div style="font-weight:900">${(c.first_name || "") + " " + (c.last_name || "")}</div>
+          <div class="miniTag">
+            ${c.passId || "—"}${c.phone ? " • " + c.phone : ""}${c.card_number ? " • " + c.card_number : ""}
+          </div>
+        </div>
+        <div class="miniTag">ID: ${c.id}</div>
+      </div>
+    `).join("") || `<div class="comboItem"><div class="miniTag">ვერ მოიძებნა…</div></div>`;
+
+    editClientList.querySelectorAll("[data-id]").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        const id = Number(el.dataset.id);
+        const c = editClientsCache.find(x => Number(x.id) === id);
+        if(c) setSelectedEditClient(c);
+      });
+    });
+  }
+
+
+  async function loadEditClients(q=""){
+  q = (q || "").trim();
+
+  if(!q){
+    editClientsCache = [];
+    renderEditClientList("");
+    setSelectedEditClient(null);
+    return;
+  }
+
+  const res = await fetch(`/api/clients/?search=${encodeURIComponent(q)}`);
+  if(!res.ok){
+    toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა");
+    return;
+  }
+
+  let data = await res.json();
+  if(data.results) data = data.results;
+
+  editClientsCache = Array.isArray(data) ? data : [];
+  renderEditClientList(q);
+}
+
+
   function showClientList(){ clientList.classList.add("show"); }
   function hideClientList(){ clientList.classList.remove("show"); }
 
   function renderClientList(filterText=""){
     const q = (filterText||"").trim().toLowerCase();
-    const items = clientsCache.filter(c=>{
-      const full = `${c.first_name||""} ${c.last_name||""}`.toLowerCase();
-      const phone = String(c.phone||"").toLowerCase();
-      const card = String(c.card_number||"").toLowerCase();
-      return !q || full.includes(q) || phone.includes(q) || card.includes(q);
-    }).slice(0, 60);
+
+    if(!q){
+      clientList.innerHTML = "";
+      hideClientList();
+      return;
+    }
+
+    const items = clientsCache.slice(0, 60);
 
     clientList.innerHTML = items.map(c=>`
       <div class="comboItem" data-id="${c.id}">
         <div>
           <div style="font-weight:900">${(c.first_name||"") + " " + (c.last_name||"")}</div>
-          <div class="miniTag">${c.phone || "—"}${c.card_number ? " • " + c.card_number : ""}</div>
+          <div class="miniTag">
+            ${c.passId || "—"}${c.phone ? " • " + c.phone : ""}${c.card_number ? " • " + c.card_number : ""}
+          </div>
         </div>
         <div class="miniTag">ID: ${c.id}</div>
       </div>
@@ -430,42 +535,110 @@
     });
   }
 
-  clientSearch.addEventListener("focus", ()=>{
-    renderClientList(clientSearch.value);
-    showClientList();
-  });
 
-  clientSearch.addEventListener("input", ()=>{
-    renderClientList(clientSearch.value);
-    showClientList();
-  });
+  editClientSearch.addEventListener("focus", async ()=>{
+  const q = editClientSearch.value.trim();
+  if(!q){
+    editClientsCache = [];
+    renderEditClientList("");
+    return;
+  }
+  await loadEditClients(q);
+  showEditClientList();
+});
 
-  document.addEventListener("click", (e)=>{
-    const wrap = clientSearch.closest(".combo");
-    if(wrap && !wrap.contains(e.target)) hideClientList();
-  });
+let editClientSearchTimer = null;
 
-  async function loadClients(){
-    const res = await fetch("/api/clients/");
-    if(!res.ok){
-      toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა");
+editClientSearch.addEventListener("input", ()=>{
+  clearTimeout(editClientSearchTimer);
+
+  editClientSearchTimer = setTimeout(async ()=>{
+    const q = editClientSearch.value.trim();
+
+    if(!q){
+      editClientsCache = [];
+      renderEditClientList("");
+      hideEditClientList();
       return;
     }
 
-    clientsCache = await res.json();
+    await loadEditClients(q);
+    showEditClientList();
+  }, 300);
+});
 
-    $("e_client").innerHTML = clientsCache.map(c =>
-      `<option value="${c.id}">${c.first_name} ${c.last_name} (${c.phone})</option>`
-    ).join("");
 
-    if(clientsCache.length){
-      const currentId = Number(clientIdHidden.value || 0);
-      const current = clientsCache.find(c => Number(c.id) === currentId) || clientsCache[0];
-      setSelectedClient(current);
-    } else {
-      setSelectedClient(null);
-    }
+
+clientSearch.addEventListener("focus", async ()=>{
+  const q = clientSearch.value.trim();
+  if(!q){
+    clientsCache = [];
+    renderClientList("");
+    return;
   }
+  await loadClients(q);
+  showClientList();
+});
+
+let clientSearchTimer = null;
+
+clientSearch.addEventListener("input", ()=>{
+  clearTimeout(clientSearchTimer);
+
+  clientSearchTimer = setTimeout(async ()=>{
+    const q = clientSearch.value.trim();
+
+    if(!q){
+      clientsCache = [];
+      renderClientList("");
+      hideClientList();
+      return;
+    }
+
+    await loadClients(q);
+    showClientList();
+  }, 300);
+});
+
+document.addEventListener("click", (e)=>{
+  const wrap = clientSearch.closest(".combo");
+  if(wrap && !wrap.contains(e.target)) hideClientList();
+
+  const editWrap = editClientSearch.closest(".combo");
+  if(editWrap && !editWrap.contains(e.target)) hideEditClientList();
+});
+
+async function loadClients(q=""){
+  q = (q || "").trim();
+
+  if(!q){
+    clientsCache = [];
+    renderClientList("");
+    // $("e_client").innerHTML = `<option value="">— აირჩიე კლიენტი —</option>`;
+    setSelectedClient(null);
+    return;
+  }
+
+  const res = await fetch(`/api/clients/?search=${encodeURIComponent(q)}`);
+  if(!res.ok){
+    toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა");
+    return;
+  }
+
+  let data = await res.json();
+  if(data.results) data = data.results;
+
+  clientsCache = Array.isArray(data) ? data : [];
+
+
+  renderClientList(q);
+
+  const currentId = Number(clientIdHidden.value || 0);
+  const current = clientsCache.find(c => Number(c.id) === currentId);
+  if(current){
+    setSelectedClient(current);
+  }
+}
 
   async function loadTrainers(){
     const res = await fetch("/api/trainers/");
@@ -545,61 +718,92 @@
     });
   }
 
-  async function loadPayments(){
-    const res = await fetch("/api/payments/");
+  async function loadPayments(q=""){
+    const query = (q || "").trim();
+    const today = todayStr();
+
+    let url = "/api/reports/payments/?";
+
+    if(query){
+      // ძებნის დროს მთელი ისტორია
+      url += `q=${encodeURIComponent(query)}`;
+    } else {
+      // ძებნის გარეშე მხოლოდ დღევანდელი
+      url += `date_from=${today}&date_to=${today}`;
+    }
+
+    const res = await fetch(url);
     if(!res.ok){
       toast("bad","შეცდომა","გადახდები ვერ ჩაიტვირთა");
       return;
     }
-    const data = await res.json();
-    renderPayments(data);
+
+    let data = await res.json();
+    let rows = data.rows || [];
+    renderPayments(rows);
   }
 
   function setDefaultOperationDates(){
     $("p_operation_date").value = toLocalInputValue(new Date());
   }
 
-function setFixedDates(){
-  const today = new Date();
+  function setFixedDates(){
+    const today = new Date();
 
-  const startYear = today.getFullYear();
-  const startMonth = today.getMonth();
-  const startDay = today.getDate();
+    const startYear = today.getFullYear();
+    const startMonth = today.getMonth();
+    const startDay = today.getDate();
 
-  const start = `${startYear}-${String(startMonth + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+    const start = `${startYear}-${String(startMonth + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
 
-  let endYear = startYear;
-  let endMonth = startMonth + 1;
+    let endYear = startYear;
+    let endMonth = startMonth + 1;
 
-  if (endMonth > 11) {
-    endMonth = 0;
-    endYear++;
+    if (endMonth > 11) {
+      endMonth = 0;
+      endYear++;
+    }
+
+    const daysInStartMonth = new Date(startYear, startMonth + 1, 0).getDate();
+    const daysInEndMonth = new Date(endYear, endMonth + 1, 0).getDate();
+
+    // let subtractDays = 0;
+    let subtractDays = 2;
+
+    // if (daysInStartMonth === 31) {
+    //   subtractDays = 2;
+    // } else if (daysInStartMonth === 30) {
+    //   subtractDays = 1;
+    // }
+
+    let endDay = startDay - subtractDays;
+
+    if (endDay < 1) endDay = 1;
+    if (endDay > daysInEndMonth) endDay = daysInEndMonth;
+
+    const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
+
+    $("p_fixed_start").value = start;
+    $("p_fixed_end").value = end;
   }
-
-  const daysInStartMonth = new Date(startYear, startMonth + 1, 0).getDate();
-  const daysInEndMonth = new Date(endYear, endMonth + 1, 0).getDate();
-
-  let subtractDays = 0;
-
-  if (daysInStartMonth === 31) {
-    subtractDays = 2;
-  } else if (daysInStartMonth === 30) {
-    subtractDays = 1;
-  }
-
-  let endDay = startDay - subtractDays;
-
-  if (endDay < 1) endDay = 1;
-  if (endDay > daysInEndMonth) endDay = daysInEndMonth;
-
-  const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
-
-  $("p_fixed_start").value = start;
-  $("p_fixed_end").value = end;
-}
 
   $("p_membership").addEventListener("change", ()=>recalc("p"));
   $("p_trainer").addEventListener("change", ()=>recalc("p"));
+
+  $("btnPaySearch").addEventListener("click", async ()=>{
+    await loadPayments($("pay_search").value);
+  });
+
+  $("btnPaySearchReset").addEventListener("click", async ()=>{
+    $("pay_search").value = "";
+    await loadPayments("");
+  });
+
+  $("pay_search").addEventListener("keydown", async (e)=>{
+    if(e.key === "Enter"){
+      await loadPayments($("pay_search").value);
+    }
+  });
 
   $("btnPay").addEventListener("click", async ()=>{
     const client = clientIdHidden.value;
@@ -639,21 +843,23 @@ function setFixedDates(){
       return;
     }
 
-    toast("ok","OK", `შენახულია ✅ სულ: ${fmtMoney(data.amount)}₾`);
+  toast("ok","OK", `შენახულია ✅ სულ: ${fmtMoney(data.amount)}₾`);
 
-    $("p_membership").value = "";
-    $("p_trainer").value = "";
-    pTotalOverridden = false;
+  $("p_membership").value = "";
+  $("p_trainer").value = "";
+  pTotalOverridden = false;
 
-    setFixedDates();
-    setDefaultOperationDates();
-    recalc("p");
-    await loadPayments();
+  setFixedDates();
+  setDefaultOperationDates();
+  recalc("p");
+  await loadPayments($("pay_search").value);
   });
 
   const overlayEdit = $("overlayEdit");
 
-  function openEdit(id){
+
+
+  async function openEdit(id){
     const p = paymentsCache.find(x => Number(x.id) === Number(id));
     if(!p){
       toast("bad","შეცდომა","ჩანაწერი ვერ მოიძებნა");
@@ -663,9 +869,22 @@ function setFixedDates(){
     editingId = id;
     $("eTitle").textContent = `რედაქტირება • Payment #${id}`;
 
-    $("e_client").value = String(p.client || "");
-    $("e_trainer").value = (p.trainer === null || p.trainer === undefined) ? "" : String(p.trainer);
-    $("e_membership").value = (p.membership === null || p.membership === undefined) ? "" : String(p.membership);
+    // preload search list
+    editClientsCache = [];
+    renderEditClientList("");
+    await loadEditClients(p.client_name || "");
+
+    setSelectedEditClient({
+      id: p.client,
+      first_name: (p.client_name || "").split(" ")[0] || "",
+      last_name: (p.client_name || "").split(" ").slice(1).join(" ") || "",
+      passId: "",
+      phone: "",
+      card_number: ""
+    });
+
+    $("e_trainer").value = p.trainer ?? "";
+    $("e_membership").value = p.membership ?? "";
 
     $("e_fixed_start").value = p.fixed_start || "";
     $("e_fixed_end").value = p.fixed_end || "";
@@ -696,7 +915,7 @@ function setFixedDates(){
   $("btnSaveEdit").addEventListener("click", async ()=>{
     if(!editingId) return;
 
-    const client = $("e_client").value;
+    const client = $("e_client_id").value;
     const membership = $("e_membership").value || null;
     const trainer = $("e_trainer").value || null;
     const method = $("e_method").value;
@@ -735,7 +954,7 @@ function setFixedDates(){
 
     toast("ok","OK", `განახლდა ✅ სულ: ${fmtMoney(data.amount)}₾`);
     closeEdit();
-    await loadPayments();
+    await loadPayments($("pay_search").value);
   });
 
   async function deletePayment(id){
@@ -757,7 +976,7 @@ function setFixedDates(){
     }
 
     toast("ok","OK","წაიშალა ✅");
-    await loadPayments();
+    await loadPayments($("pay_search").value);
   }
 
   const overlayNewClient = $("overlayNewClient");
@@ -771,7 +990,7 @@ function setFixedDates(){
   }
 
   function clearNewClientForm(){
-    ["nc_first","nc_last","nc_phone","nc_email","nc_org","nc_card","nc_comment"].forEach(id=>$(id).value="");
+    ["nc_first","nc_last","nc_passid","nc_phone","nc_email","nc_org","nc_card","nc_comment"].forEach(id=>$(id).value="");
     $("nc_birth").value = "";
     $("nc_gender").value = "";
     $("nc_photo").value = "";
@@ -785,16 +1004,18 @@ function setFixedDates(){
   $("btnSaveClient").addEventListener("click", async ()=>{
     const first_name = $("nc_first").value.trim();
     const last_name = $("nc_last").value.trim();
+    const passId = $("nc_passid").value.trim();
     const phone = $("nc_phone").value.trim();
 
-    if(!first_name || !last_name || !phone){
-      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, ტელეფონი");
+    if(!first_name || !last_name || !phone || !passId){
+      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, passId, ტელეფონი");
       return;
     }
 
     const fd = new FormData();
     fd.append("first_name", first_name);
     fd.append("last_name", last_name);
+    fd.append("passId", passId);
     fd.append("phone", phone);
 
     fd.append("birth_date", $("nc_birth").value);
@@ -802,14 +1023,14 @@ function setFixedDates(){
     fd.append("email", $("nc_email").value.trim());
     fd.append("organization", $("nc_org").value.trim());
     const cardRaw = $("nc_card").value.trim();
-      const cardNumber = cardRaw ? parseInt(cardRaw, 10) : "";
+    const cardNumber = cardRaw ? parseInt(cardRaw, 10) : "";
 
-      if (cardRaw && Number.isNaN(cardNumber)) {
-        toast("bad", "შეცდომა", "ბარათის ნომერი უნდა იყოს მხოლოდ რიცხვი.");
-        return;
-      }
+    if (cardRaw && Number.isNaN(cardNumber)) {
+      toast("bad", "შეცდომა", "ბარათის ნომერი უნდა იყოს მხოლოდ რიცხვი.");
+      return;
+    }
 
-      fd.append("card_number", cardNumber);
+    fd.append("card_number", cardNumber);
     fd.append("comment", $("nc_comment").value.trim());
 
     const photo = $("nc_photo").files[0];
@@ -825,7 +1046,7 @@ function setFixedDates(){
     try{ data = await res.json(); }catch(e){}
 
     if(!res.ok){
-      toast("bad","ვერ შეინახა", data.detail || JSON.stringify(data));
+      toast("bad","ვერ შეინახა", data.detail || (data.passId && data.passId[0]) || JSON.stringify(data));
       return;
     }
 
@@ -833,19 +1054,29 @@ function setFixedDates(){
     closeNewClient();
     clearNewClientForm();
 
-    await loadClients();
 
-    const created = clientsCache.find(x => Number(x.id) === Number(data.id)) || data;
-    if(created && created.id) setSelectedClient(created);
 
-    renderClientList(clientSearch.value);
+  clientsCache.unshift(data);
+  setSelectedClient(data);
+  renderClientList(clientSearch.value);
   });
 
-  $("btnReload").addEventListener("click", async ()=>{
-    await loadClients();
+$("btnReload").addEventListener("click", async ()=>{
+    clientsCache = [];
+    editClientsCache = [];
+    membershipsCache = [];
+    trainersCache = [];
+    paymentsCache = [];
+    clientSearch.value = "";
+    $("pay_search").value = "";
+    renderClientList("");
+    // $("e_client").innerHTML = `<option value="">— აირჩიე კლიენტი —</option>`;
+    setSelectedClient(null);
+
     await loadTrainers();
     await loadMemberships();
-    await loadPayments();
+    await loadPayments("");
+
     setFixedDates();
     setDefaultOperationDates();
     pTotalOverridden = false;
@@ -853,15 +1084,26 @@ function setFixedDates(){
     toast("ok","OK","განახლდა");
   });
 
-  (async ()=>{
-    await loadClients();
-    await loadTrainers();
-    await loadMemberships();
-    await loadPayments();
-    setFixedDates();
-    setDefaultOperationDates();
-    pTotalOverridden = false;
-    recalc("p");
-  })();
+(async ()=>{
+  clientsCache = [];
+  paymentsCache = [];
+  renderClientList("");
+
+  await loadTrainers();
+  await loadMemberships();
+  await loadPayments("");
+
+  editClientsCache = [];
+  $("e_client_search").value = "";
+  $("e_client_label").value = "—";
+  $("e_client_id").value = "";
+  renderEditClientList("");
+  setSelectedClient(null);
+
+  setFixedDates();
+  setDefaultOperationDates();
+  pTotalOverridden = false;
+  recalc("p");
+})();
 </script>
 {% endblock %}

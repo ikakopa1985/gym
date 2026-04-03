@@ -7,7 +7,7 @@ from django.db import transaction
 
 from openpyxl import load_workbook
 
-from gymapp.models import Client
+from gymapp.models import *
 
 
 HEADER_MAP = {
@@ -178,7 +178,11 @@ def get_photo_db_path(photo_path_raw):
 
 class Command(BaseCommand):
     help = "Excel-იდან Client-ების იმპორტი"
+    CheckIn.objects.all().delete()
+    ClientMembership.objects.all().delete()
+    # Client.objects.all().delete()
     Client.objects.all().delete()
+
 
     def add_arguments(self, parser):
         parser.add_argument("excel_file", type=str, help="Excel ფაილის ბილიკი (.xlsx)")
@@ -226,7 +230,7 @@ class Command(BaseCommand):
                 gender = parse_gender(row[header_indexes["gender"]]) if "gender" in header_indexes else None
                 email = clean_str(row[header_indexes["email"]]) if "email" in header_indexes else ""
                 organization = translit_to_georgian(clean_str(row[header_indexes["organization"]])) if "organization" in header_indexes else ""
-                card_number = get_card_number(row[header_indexes["card_number"]]) if "card_number" in header_indexes else ""
+                card_number = get_card_number(int(row[header_indexes["card_number"]]))if "card_number" in header_indexes else ""
                 comment = translit_to_georgian(clean_str(row[header_indexes["comment"]])) if "comment" in header_indexes else ""
                 photo_path_raw = clean_str(row[header_indexes["photo"]]) if "photo" in header_indexes else ""
 
