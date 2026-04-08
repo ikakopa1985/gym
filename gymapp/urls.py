@@ -11,6 +11,8 @@ router.register(r"clients", ClientViewSet, basename="client")
 router.register(r"payments", PaymentViewSet, basename="payment")
 router.register(r"checkins", CheckInViewSet, basename="checkin")
 router.register(r"reports", ReportsViewSet, basename="reports")
+router.register(r"card-payments", CardPaymentViewSet, basename="card-payment")
+
 
 urlpatterns = [
     path("", index, name="index"),
@@ -24,6 +26,10 @@ urlpatterns = [
     path("sync/", sync, name="sync"),
     path("syncpartial/", syncpartial, name="syncpartial"),
     path("sync/status/", sync_status),
+    path("card-payments/", card_payments_page, name="card_payments"),
+
+    path("login/", login_view, name="login"),
+    path("logout/", logout_view, name="logout"),
 
 
 

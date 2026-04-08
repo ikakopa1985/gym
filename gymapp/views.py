@@ -27,6 +27,8 @@ from pyzkaccess.enums import VerifyMode, PassageDirection
 import asyncio
 from gym.settings import ipSettings
 from django.db.models import Prefetch
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
 
 from .models import *
 
@@ -64,6 +66,11 @@ def checkins_page(request):
 @login_required
 def reports_page(request):
     return render(request, "reports.html")
+
+@login_required
+def card_payments_page(request):
+    return render(request, "card_payments.html")
+
 
 
 # =========================
@@ -221,7 +228,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all().order_by("-id")
     serializer_class = ClientSerializer
     filter_backends = [SearchFilter, OrderingFilter]
-    search_fields = ["first_name", "last_name", "email", "organization", "card_number"]
+    search_fields = ["first_name", "last_name", "card_number"]
     ordering_fields = ["id", "created_at", "first_name", "last_name"]
 
     @action(detail=True, methods=["get"])
@@ -300,7 +307,6 @@ class ReportsViewSet(viewsets.ViewSet):
         except Exception:
             return None
 
-
     @action(detail=False, methods=["get"])
     def summary(self, request):
 
@@ -320,6 +326,22 @@ class ReportsViewSet(viewsets.ViewSet):
         payments_month = Payment.objects.filter(
             operation_date__date__gte=month_start
         )
+
+        # მხოლოდ დღეს გაყიდული აბონემენტები
+        memberships_sold_today_qs = payments_today.filter(membership__isnull=False)
+        memberships_sold_today_count = memberships_sold_today_qs.count()
+        memberships_sold_today_amount = memberships_sold_today_qs.aggregate(
+            s=Coalesce(Sum("amount"), Decimal("0.00"))
+        )["s"]
+
+        # მხოლოდ დღეს ბარათის თანხები
+        card_payments_today_qs = CardPayment.objects.filter(
+            operation_date__date=today
+        )
+        card_payments_today_count = card_payments_today_qs.count()
+        card_payments_today_amount = card_payments_today_qs.aggregate(
+            s=Coalesce(Sum("amount"), Decimal("0.00"))
+        )["s"]
 
         # totals
         today_income = payments_today.aggregate(
@@ -356,6 +378,13 @@ class ReportsViewSet(viewsets.ViewSet):
 
             "active_memberships": active_memberships,
             "expired_memberships": expired_memberships,
+
+            # ახალი ველები
+            "memberships_sold_today_count": memberships_sold_today_count,
+            "memberships_sold_today_amount": float(memberships_sold_today_amount or 0),
+
+            "card_payments_today_count": card_payments_today_count,
+            "card_payments_today_amount": float(card_payments_today_amount or 0),
         })
 
     @action(detail=False, methods=["get"])
@@ -1079,3 +1108,84 @@ def sync_status(request):
         "pending": pending,
         "error": error
     })
+
+
+
+
+
+class CardPaymentSerializer(serializers.ModelSerializer):
+    client_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CardPayment
+        fields = [
+            "id",
+            "client",
+            "client_name",
+            "amount",
+            "operation_date",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+    def get_client_name(self, obj):
+        return f"{obj.client.first_name} {obj.client.last_name}"
+
+
+
+class CardPaymentViewSet(viewsets.ModelViewSet):
+    serializer_class = CardPaymentSerializer
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = [
+        "client__first_name",
+        "client__last_name",
+        "client__phone",
+        "client__card_number",
+        "client__passId",
+    ]
+    ordering_fields = ["operation_date", "created_at", "amount", "id"]
+    ordering = ["-operation_date", "-id"]
+
+    def get_queryset(self):
+        qs = CardPayment.objects.select_related("client").all().order_by("-operation_date", "-id")
+
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        client_id = self.request.query_params.get("client")
+
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+        if date_from:
+            qs = qs.filter(operation_date__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(operation_date__date__lte=date_to)
+
+        return qs
+
+
+
+
+def login_view(request):
+    if request.user.is_authenticated:
+        return redirect("/")  # უკვე შესულია
+
+    error = None
+
+    if request.method == "POST":
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+
+        user = authenticate(request, username=username, password=password)
+
+        if user:
+            login(request, user)
+            return redirect("/")
+        else:
+            error = "არასწორი მომხმარებელი ან პაროლი"
+
+    return render(request, "login.html", {"error": error})
+
+
+def logout_view(request):
+    logout(request)
+    return redirect("login")

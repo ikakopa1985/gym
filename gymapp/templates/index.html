@@ -181,7 +181,7 @@
       <div class="head">
         <div>
           <h2>კლიენტების სია</h2>
-          <div class="sub">ძებნა სახელით, გვარით, ბარათის ნომრით და პირადი ნომრით • Check-in ვადის შემოწმებით</div>
+          <div class="sub"> ძებნა სახელით, გვარით და ბარათის ნომრით</div>
         </div>
 
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
@@ -195,7 +195,9 @@
         <div class="searchRow">
           <div class="field">
             <span>🔎</span>
-            <input id="q" placeholder="მაგ: გიორგი, 01017043857, 123456 ან ბარათის ნომერი..." autocomplete="off" />
+            <input id="q"
+                 placeholder="ძებნა: სახელი, გვარი ან ბარათის ნომერი..."
+                 autocomplete="off" />
           </div>
           <button class="btn primary" id="btnSearch" type="button">ძებნა</button>
           <button class="btn" id="btnReset" type="button">გასუფთავება</button>
@@ -230,10 +232,22 @@
           </div>
         </div>
         <div class="body">
-          <div class="stat">
-            <div class="k">დღეს შემოსული კლიენტები</div>
-            <div class="v" id="statTodayCheckins">0</div>
-            <div class="s">Check-in ჩანაწერები</div>
+          <div class="stat" style="margin-top:12px">
+            <div class="k">დღეს გაყიდული აბონემენტები</div>
+            <div class="v" id="statMembershipsSoldToday">0</div>
+            <div class="s">
+              გადაიხადა აბონემენტის თანხა • ჯამი:
+              <span class="mono" id="statMembershipsSoldTodayAmount">0.00₾</span>
+            </div>
+          </div>
+
+          <div class="stat" style="margin-top:12px">
+            <div class="k">დღეს ბარათის თანხის გადახდა</div>
+            <div class="v" id="statCardPaymentsToday">0</div>
+            <div class="s">
+              ბარათის დამზადების გადახდები • ჯამი:
+              <span class="mono" id="statCardPaymentsTodayAmount">0.00₾</span>
+            </div>
           </div>
 
           <div class="mini">
@@ -248,14 +262,11 @@
           <div>
             <h2>ფინანსები</h2>
             <div class="sub">Reports API</div>
-            <div class="stat" style="margin-top:12px">
-              <div class="k">დღეს შემოსავალი მეთოდებით</div>
-              <div class="s">
-                ქეში: <span class="mono" id="todayCash">0.00₾</span> •
-                ბარათი: <span class="mono" id="todayCard">0.00₾</span> •
-                გადმორიცხვა: <span class="mono" id="todayTransfer">0.00₾</span>
+              <div class="stat" style="margin-top:12px">
+                <div class="k">დღიური შემოსავალი</div>
+                <div class="v" id="statTodayIncome">0₾</div>
+                <div class="s">Payment-ის ჯამი</div>
               </div>
-            </div>
 
             <div class="stat" style="margin-top:12px">
               <div class="k">თვეში შემოსავალი მეთოდებით</div>
@@ -269,9 +280,9 @@
         </div>
         <div class="body">
           <div class="stat">
-            <div class="k">დღიური შემოსავალი</div>
-            <div class="v" id="statTodayIncome">0₾</div>
-            <div class="s">Payment-ის ჯამი</div>
+            <div class="k">დღეს შემოსული კლიენტები</div>
+            <div class="v" id="statTodayCheckins">0</div>
+            <div class="s">Check-in ჩანაწერები</div>
           </div>
           <div class="stat" style="margin-top:12px">
             <div class="k">თვიური შემოსავალი</div>
@@ -329,23 +340,95 @@
 
 
   <!-- Client Modal -->
-  <div class="modalOverlay" id="overlay">
-    <div class="modal">
-      <div class="mhead">
-        <strong id="mTitle">კლიენტის დეტალები</strong>
-        <button class="closeX" id="mClose" type="button">✕</button>
+<!-- Client Modal -->
+<div class="modalOverlay" id="overlay">
+  <div class="modal" style="max-width:720px;">
+    <div class="mhead">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <strong id="mTitle" style="font-size:16px;">კლიენტის დეტალები</strong>
+        <span class="muted" style="font-size:12px;">ინფორმაცია, სტატუსი და სწრაფი ქმედებები</span>
       </div>
-      <div class="mbody">
-        <div class="kv" id="mKV" style="display:grid;grid-template-columns:180px 1fr;gap:10px 14px;font-size:13px;"></div>
-        <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
-          <button class="btn primary" id="mCheckin" type="button">✅ Check-in</button>
-          <button class="btn" id="mPayment" type="button">💳 გადახდა</button>
-          <button class="btn" id="mPayHistory" type="button">📜 გადახდების ისტორია</button>
-          <button class="btn" id="mEdit" type="button">✏️ რედაქტირება</button>
+      <button class="closeX" id="mClose" type="button">✕</button>
+    </div>
+
+    <div class="mbody">
+
+      <!-- Top profile block -->
+      <div style="
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        margin-bottom:18px;
+      ">
+        <div style="
+          position:relative;
+          width:150px;
+          height:150px;
+          border-radius:20px;
+          padding:4px;
+          background:linear-gradient(135deg, var(--brand), var(--brand2));
+          box-shadow:0 14px 35px rgba(0,0,0,.28);
+        ">
+          <img id="mPhoto"
+               src="/static/no-photo.jpg"
+               alt="Client Photo"
+               style="
+                 width:100%;
+                 height:100%;
+                 object-fit:cover;
+                 border-radius:16px;
+                 display:block;
+                 background:var(--field-bg);
+                 border:2px solid rgba(255,255,255,.08);
+               ">
+        </div>
+
+        <div style="margin-top:12px;text-align:center;">
+          <div id="mClientNameLabel" style="font-size:20px;font-weight:900;letter-spacing:.2px;">
+            კლიენტი
+          </div>
+          <div class="muted" style="font-size:12px;margin-top:4px;">
+            პროფილის ინფორმაცია
+          </div>
         </div>
       </div>
+
+      <!-- Info card -->
+      <div style="
+        border:1px solid var(--line);
+        border-radius:18px;
+        padding:14px;
+        background:rgba(255,255,255,.03);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+      ">
+        <div class="kv" id="mKV" style="display:grid;grid-template-columns:180px 1fr;gap:10px 14px;font-size:13px;"></div>
+      </div>
+
+      <!-- Actions -->
+      <div style="
+        margin-top:16px;
+        display:grid;
+        grid-template-columns:repeat(2, minmax(0,1fr));
+        gap:10px;
+      ">
+        <button class="btn primary" id="mCheckin" type="button" style="justify-content:center;">
+          ✅ Check-in
+        </button>
+        <button class="btn" id="mPayment" type="button" style="justify-content:center;">
+          💳 გადახდა
+        </button>
+        <button class="btn" id="mPayHistory" type="button" style="justify-content:center;">
+          📜 გადახდების ისტორია
+        </button>
+        <button class="btn" id="mEdit" type="button" style="justify-content:center;">
+          ✏️ რედაქტირება
+        </button>
+      </div>
+
     </div>
   </div>
+</div>
 
   <!-- Payments History Modal (same function as payments page details) -->
   <div class="modalOverlay" id="overlayPayHistory">
@@ -649,28 +732,63 @@ async function sync(){
   }
 
   async function loadSummary(){
-  const res = await fetch("/api/reports/summary/");
-  if(!res.ok) return;
-  const s = await res.json();
+    const res = await fetch("/api/reports/summary/");
+    if(!res.ok) return;
+    const s = await res.json();
 
-  $("statTodayCheckins").textContent = Number(s.today_checkins || 0);
+    if ($("statTodayCheckins")) {
+      $("statTodayCheckins").textContent = Number(s.today_checkins || 0);
+    }
 
-  $("statTodayIncome").textContent = `${Number(s.today_income || 0).toFixed(2)}₾`;
-  $("statMonthIncome").textContent = `${Number(s.month_income || 0).toFixed(2)}₾`;
+    if ($("statTodayIncome")) {
+      $("statTodayIncome").textContent = `${Number(s.today_income || 0).toFixed(2)}₾`;
+    }
 
-  // ✅ დღეს მეთოდებით
-  $("todayCash").textContent = `${Number(s.today_cash || 0).toFixed(2)}₾`;
-  $("todayCard").textContent = `${Number(s.today_card || 0).toFixed(2)}₾`;
-  $("todayTransfer").textContent = `${Number(s.today_transfer || 0).toFixed(2)}₾`;
+    if ($("statMonthIncome")) {
+      $("statMonthIncome").textContent = `${Number(s.month_income || 0).toFixed(2)}₾`;
+    }
 
-  // ✅ თვეში მეთოდებით
-  $("monthCash").textContent = `${Number(s.month_cash || 0).toFixed(2)}₾`;
-  $("monthCard").textContent = `${Number(s.month_card || 0).toFixed(2)}₾`;
-  $("monthTransfer").textContent = `${Number(s.month_transfer || 0).toFixed(2)}₾`;
+    if ($("todayCash")) {
+      $("todayCash").textContent = `${Number(s.today_cash || 0).toFixed(2)}₾`;
+    }
+    if ($("todayCard")) {
+      $("todayCard").textContent = `${Number(s.today_card || 0).toFixed(2)}₾`;
+    }
+    if ($("todayTransfer")) {
+      $("todayTransfer").textContent = `${Number(s.today_transfer || 0).toFixed(2)}₾`;
+    }
 
-  $("chipActive").textContent = `აქტიური: ${Number(s.active_memberships || 0)}`;
-  $("chipExpired").textContent = `ვადაგასული: ${Number(s.expired_memberships || 0)}`;
-}
+    if ($("monthCash")) {
+      $("monthCash").textContent = `${Number(s.month_cash || 0).toFixed(2)}₾`;
+    }
+    if ($("monthCard")) {
+      $("monthCard").textContent = `${Number(s.month_card || 0).toFixed(2)}₾`;
+    }
+    if ($("monthTransfer")) {
+      $("monthTransfer").textContent = `${Number(s.month_transfer || 0).toFixed(2)}₾`;
+    }
+
+    if ($("chipActive")) {
+      $("chipActive").textContent = `აქტიური: ${Number(s.active_memberships || 0)}`;
+    }
+    if ($("chipExpired")) {
+      $("chipExpired").textContent = `ვადაგასული: ${Number(s.expired_memberships || 0)}`;
+    }
+
+    if ($("statMembershipsSoldToday")) {
+      $("statMembershipsSoldToday").textContent = Number(s.memberships_sold_today_count || 0);
+    }
+    if ($("statMembershipsSoldTodayAmount")) {
+      $("statMembershipsSoldTodayAmount").textContent = `${Number(s.memberships_sold_today_amount || 0).toFixed(2)}₾`;
+    }
+
+    if ($("statCardPaymentsToday")) {
+      $("statCardPaymentsToday").textContent = Number(s.card_payments_today_count || 0);
+    }
+    if ($("statCardPaymentsTodayAmount")) {
+      $("statCardPaymentsTodayAmount").textContent = `${Number(s.card_payments_today_amount || 0).toFixed(2)}₾`;
+    }
+  }
 
 async function doCheckinByClientId(clientId){
   const res = await fetch("/api/checkins/", {
@@ -767,6 +885,7 @@ async function doCheckinByClientId(clientId){
   // ===== Client modal
 async function openClientModal(id){
   const c = clientsCache.find(x => Number(x.id) === Number(id));
+  const photoEl = $("mPhoto");
   if(!c) return;
 
   selectedClientId = id;
@@ -779,6 +898,16 @@ async function openClientModal(id){
     if(res.ok){
       const memberships = await res.json();
       const active = (memberships || []).find(m => m.is_active || m.status === "active");
+
+      if (c.photo) {
+          if (c.photo.startsWith("http") || c.photo.startsWith("/")) {
+            photoEl.src = c.photo;
+          } else {
+            photoEl.src = "/media/" + c.photo;
+          }
+        } else {
+          photoEl.src = "/static/no-photo.jpg";
+        }
 
       if(active){
         activeMembershipText = active.membership_name || `ID: ${active.membership}`;

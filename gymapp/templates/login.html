@@ -1,0 +1,86 @@
+{% load static %}
+<!doctype html>
+<html lang="ka" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>Login • Gym Manager</title>
+
+  <style>
+    body{
+      margin:0;
+      font-family:system-ui;
+      background:#071c21;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:100vh;
+      color:#fff;
+    }
+
+    .card{
+      width:360px;
+      padding:28px;
+      border-radius:18px;
+      background:rgba(12,43,49,1);
+      border:1px solid rgba(255,255,255,.1);
+      box-shadow:0 20px 60px rgba(0,0,0,.4);
+    }
+
+    h2{
+      margin:0 0 18px;
+      text-align:center;
+    }
+
+    .input{
+      width:100%;
+      padding:12px;
+      margin-bottom:12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.1);
+      background:rgba(0,0,0,.2);
+      color:#fff;
+      outline:0;
+    }
+
+    .btn{
+      width:100%;
+      padding:12px;
+      border-radius:12px;
+      border:none;
+      background:linear-gradient(135deg,#2699A5,#1D6271);
+      color:white;
+      font-weight:bold;
+      cursor:pointer;
+    }
+
+    .error{
+      background:#ff4d4d;
+      padding:10px;
+      border-radius:10px;
+      margin-bottom:10px;
+      text-align:center;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="card">
+  <h2>🔐 Login</h2>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    <input class="input" name="username" placeholder="Username" required>
+    <input class="input" type="password" name="password" placeholder="Password" required>
+
+    <button class="btn">შესვლა</button>
+  </form>
+</div>
+
+</body>
+</html>

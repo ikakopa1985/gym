@@ -1,0 +1,773 @@
+{% extends "base.html" %}
+{% block title %}ბარათის გადახდები • Gym Manager{% endblock %}
+{% block nav_payments_active %}active{% endblock %}
+
+{% block extra_css %}
+<style>
+  .grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px;}
+  .kv{display:grid;grid-template-columns:180px 1fr;gap:10px 14px;font-size:13px;}
+  .kv label{color:var(--muted);font-weight:900}
+  .input{width:100%;padding:10px 12px;border-radius:14px;border:1px solid var(--line2);background:var(--field-bg);color:var(--text);outline:0;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .tableWrap{margin-top:12px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--field-bg);}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{padding:12px;border-bottom:1px solid var(--line);text-align:left;font-weight:900;position:sticky;top:0;background:rgba(255,255,255,.03)}
+  tbody td{padding:12px;border-bottom:1px solid rgba(255,255,255,.06)}
+  tbody tr:hover{background:rgba(38,153,165,.08)}
+  .tdActions{white-space:nowrap;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  @media (max-width: 900px){ .kv{grid-template-columns:1fr} }
+  .muted{color:var(--muted)}
+  .combo{position:relative;width:100%}
+  .comboInput{
+    width:100%;padding:10px 12px;border-radius:14px;border:1px solid var(--line2);
+    background:var(--field-bg);color:var(--text);outline:0;
+  }
+  .comboList{
+    position:absolute;left:0;right:0;top:calc(100% + 8px);
+    border:1px solid var(--line);
+    background:rgba(10,35,40,.98);
+    border-radius:14px;
+    max-height:260px;
+    overflow:auto;
+    display:none;
+    z-index:30;
+    box-shadow: var(--shadow);
+  }
+  .comboList.show{display:block}
+  .comboItem{
+    padding:10px 12px;
+    border-bottom:1px solid rgba(255,255,255,.06);
+    cursor:pointer;
+    display:flex;justify-content:space-between;gap:10px;
+  }
+  .comboItem:hover{background:rgba(38,153,165,.12)}
+  .comboItem:last-child{border-bottom:0}
+  .miniTag{font-size:12px;color:var(--muted)}
+
+  .clientInfoBox{
+    border:1px solid var(--line);
+    border-radius:14px;
+    background:rgba(255,255,255,.02);
+    padding:12px;
+  }
+  .commentBox{
+    margin-top:8px;
+    padding:10px 12px;
+    border:1px solid var(--line2);
+    border-radius:12px;
+    background:rgba(255,255,255,.03);
+    min-height:42px;
+    white-space:pre-wrap;
+    color:red;
+  }
+
+  .modal{max-height:90vh;overflow-y:auto;}
+  .mbody .kv{grid-template-columns:180px 1fr}
+  @media (max-width: 760px){
+    .mbody .kv{grid-template-columns:1fr}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+
+  <!-- Create form -->
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>ბარათის გადახდა</h2>
+        <div class="sub">კლიენტის ძებნა dropdown-ით • passId-ითაც ძებნა • + ღილაკით კლიენტის დამატება • ოპერაციის თარიღი რედაქტირებადია</div>
+      </div>
+      <div class="row">
+        <button class="btn" id="btnReload" type="button">🔄 განახლება</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="kv">
+        <label>კლიენტი *</label>
+        <div style="display:flex;gap:10px;align-items:center;width:100%">
+          <div class="combo" style="flex:1">
+            <input class="comboInput" id="cp_client_search" placeholder="დაწერე: სახელი / გვარი / ტელეფონი / passId / ბარათი...">
+            <div class="comboList" id="cp_client_list"></div>
+          </div>
+          <button class="btn primary" id="btnOpenNewClient" type="button" title="ახალი კლიენტი">＋</button>
+        </div>
+
+        <label>არჩეული კლიენტი</label>
+        <input class="input" id="cp_client_label" disabled value="—">
+        <input type="hidden" id="cp_client_id">
+
+        <label>კომენტარი</label>
+        <div class="clientInfoBox">
+          <div class="muted" style="font-size:12px;">არჩეული კლიენტის კომენტარი</div>
+          <div id="cp_client_comment" class="commentBox">—</div>
+        </div>
+
+        <label>თანხა *</label>
+        <input class="input" id="cp_amount" inputmode="decimal" placeholder="მაგ: 10">
+
+        <label>ოპერაციის თარიღი</label>
+        <input class="input" id="cp_operation_date" type="datetime-local">
+      </div>
+
+      <div style="margin-top:12px">
+        <button class="btn primary" id="btnSaveCardPay" type="button">💳 შენახვა</button>
+      </div>
+
+      <div class="hint">
+        შენიშვნა: ეს გვერდი არის მხოლოდ ბარათის დამზადების თანხისთვის.
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>ბარათის გადახდების ისტორია</h2>
+        <div class="sub">ნაგულისხმევად ჩანს მხოლოდ დღევანდელი ჩანაწერები • ძებნა გვარით / პირადი ნომრით / ბარათის ნომრით</div>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="row" style="margin-bottom:12px">
+        <input class="input" id="cp_search" placeholder="ძებნა: გვარი / პირადი ნომერი / ბარათის ნომერი">
+        <button class="btn primary" id="btnCardPaySearch" type="button">ძებნა</button>
+        <button class="btn" id="btnCardPaySearchReset" type="button">გასუფთავება</button>
+      </div>
+
+      <div class="tableWrap" style="max-height:520px; overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ოპერაციის თარიღი</th>
+              <th>კლიენტი</th>
+              <th>თანხა</th>
+              <th>შექმნის დრო</th>
+              <th style="width:170px">ქმედება</th>
+            </tr>
+          </thead>
+          <tbody id="cp_tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Edit Modal -->
+<div class="modalOverlay" id="overlayEditCardPay">
+  <div class="modal" style="max-width:860px;">
+    <div class="mhead">
+      <strong id="ecpTitle">რედაქტირება</strong>
+      <button class="closeX" id="ecpClose" type="button">✕</button>
+    </div>
+
+    <div class="mbody">
+      <div class="kv">
+        <label>კლიენტი *</label>
+        <div style="display:flex;gap:10px;align-items:center;width:100%">
+          <div class="combo" style="flex:1">
+            <input class="comboInput" id="ecp_client_search" placeholder="დაწერე: სახელი / გვარი / ტელეფონი / passId / ბარათი...">
+            <div class="comboList" id="ecp_client_list"></div>
+          </div>
+        </div>
+
+        <label>არჩეული კლიენტი</label>
+        <input class="input" id="ecp_client_label" disabled value="—">
+        <input type="hidden" id="ecp_client_id">
+
+        <label>თანხა *</label>
+        <input class="input" id="ecp_amount" inputmode="decimal" placeholder="მაგ: 10">
+
+        <label>ოპერაციის თარიღი</label>
+        <input class="input" id="ecp_operation_date" type="datetime-local">
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn primary" id="btnSaveEditCardPay" type="button">💾 შენახვა</button>
+        <button class="btn" id="btnCancelEditCardPay" type="button">გაუქმება</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Client Modal -->
+<div class="modalOverlay" id="overlayNewClient">
+  <div class="modal" style="max-width:860px;">
+    <div class="mhead">
+      <strong>ახალი კლიენტი</strong>
+      <button class="closeX" id="cClose" type="button">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="kv">
+        <label>სახელი *</label>
+        <input class="input" id="nc_first" placeholder="გიორგი">
+
+        <label>გვარი *</label>
+        <input class="input" id="nc_last" placeholder="კაპანაძე">
+
+        <label>passId / პირადი ნომერი *</label>
+        <input class="input" id="nc_passid" placeholder="01017043857">
+
+        <label>დაბ. თარიღი</label>
+        <input class="input" id="nc_birth" type="date">
+
+        <label>სქესი</label>
+        <select class="input" id="nc_gender">
+          <option value="">—</option>
+          <option value="male">მამრობითი</option>
+          <option value="female">მდედრობითი</option>
+          <option value="other">სხვა</option>
+        </select>
+
+        <label>ტელეფონი *</label>
+        <input class="input" id="nc_phone" placeholder="555123456">
+
+        <label>ელ. ფოსტა</label>
+        <input class="input" id="nc_email" type="email" placeholder="name@mail.com">
+
+        <label>ორგანიზაცია</label>
+        <input class="input" id="nc_org" placeholder="Company / Organization">
+
+        <label>ბარათის ნომერი</label>
+        <input class="input" id="nc_card" placeholder="CARD-001">
+
+        <label>ფოტოსურათი</label>
+        <input class="input" id="nc_photo" type="file" accept="image/*">
+
+        <label>კომენტარი</label>
+        <textarea class="input" id="nc_comment" rows="3" placeholder="შენიშვნა კლიენტზე..."></textarea>
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        <button class="btn primary" id="btnSaveClient" type="button">შენახვა</button>
+        <button class="btn" id="btnCancelClient" type="button">გაუქმება</button>
+      </div>
+
+      <div class="hint">შენახვის შემდეგ კლიენტი ავტომატურად აირჩევა ბარათის გადახდაზე.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const $ = (id)=>document.getElementById(id);
+
+  let clientsCache = [];
+  let editClientsCache = [];
+  let cardPaymentsCache = [];
+  let editingId = null;
+
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function toLocalInputValue(dateObj){
+    return `${dateObj.getFullYear()}-${pad2(dateObj.getMonth()+1)}-${pad2(dateObj.getDate())}T${pad2(dateObj.getHours())}:${pad2(dateObj.getMinutes())}`;
+  }
+
+  function isoToLocalInputValue(iso){
+    if(!iso) return "";
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return "";
+    return toLocalInputValue(d);
+  }
+
+  function localInputToISO(v){
+    if(!v) return null;
+    const d = new Date(v);
+    if(isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
+  function fmtMoney(v){
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) ? n.toFixed(2) : "0.00";
+  }
+
+  function fmtDT(iso){
+    if(!iso) return "—";
+    return String(iso).slice(0,19).replace("T"," ");
+  }
+
+  function todayStr(){
+    const d = new Date();
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  }
+
+  function parseNum(v){
+    if(v === null || v === undefined) return null;
+    const s = String(v).replace(",", ".").trim();
+    if(!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  const clientSearch = $("cp_client_search");
+  const clientList = $("cp_client_list");
+  const clientLabel = $("cp_client_label");
+  const clientIdHidden = $("cp_client_id");
+  const clientCommentBox = $("cp_client_comment");
+
+  const editClientSearch = $("ecp_client_search");
+  const editClientList = $("ecp_client_list");
+  const editClientLabel = $("ecp_client_label");
+  const editClientIdHidden = $("ecp_client_id");
+
+  function clientText(c){
+    const full = `${c.first_name||""} ${c.last_name||""}`.trim();
+    const passId = c.passId || "";
+    const phone = c.phone || "";
+    const card = c.card_number || "";
+    return `${full}${passId ? " • " + passId : ""}${phone ? " • " + phone : ""}${card ? " • " + card : ""}`;
+  }
+
+  function setSelectedClient(c){
+    clientIdHidden.value = c ? String(c.id) : "";
+    clientLabel.value = c ? clientText(c) : "—";
+    clientSearch.value = c ? clientText(c) : "";
+    clientCommentBox.textContent = (c && c.comment && String(c.comment).trim()) ? c.comment : "—";
+    hideClientList();
+  }
+
+  function setSelectedEditClient(c){
+    editClientIdHidden.value = c ? String(c.id) : "";
+    editClientLabel.value = c ? clientText(c) : "—";
+    editClientSearch.value = c ? clientText(c) : "";
+    hideEditClientList();
+  }
+
+  function showClientList(){ clientList.classList.add("show"); }
+  function hideClientList(){ clientList.classList.remove("show"); }
+  function showEditClientList(){ editClientList.classList.add("show"); }
+  function hideEditClientList(){ editClientList.classList.remove("show"); }
+
+  function renderClientList(){
+    clientList.innerHTML = clientsCache.map(c=>`
+      <div class="comboItem" data-id="${c.id}">
+        <div>
+          <div style="font-weight:900">${(c.first_name || "") + " " + (c.last_name || "")}</div>
+          <div class="miniTag">
+            ${c.passId || "—"}${c.phone ? " • " + c.phone : ""}${c.card_number ? " • " + c.card_number : ""}
+          </div>
+        </div>
+        <div class="miniTag">ID: ${c.id}</div>
+      </div>
+    `).join("") || `<div class="comboItem"><div class="miniTag">ვერ მოიძებნა…</div></div>`;
+
+    clientList.querySelectorAll("[data-id]").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        const id = Number(el.dataset.id);
+        const c = clientsCache.find(x => Number(x.id) === id);
+        if(c) setSelectedClient(c);
+      });
+    });
+  }
+
+  function renderEditClientList(){
+    editClientList.innerHTML = editClientsCache.map(c=>`
+      <div class="comboItem" data-id="${c.id}">
+        <div>
+          <div style="font-weight:900">${(c.first_name || "") + " " + (c.last_name || "")}</div>
+          <div class="miniTag">
+            ${c.passId || "—"}${c.phone ? " • " + c.phone : ""}${c.card_number ? " • " + c.card_number : ""}
+          </div>
+        </div>
+        <div class="miniTag">ID: ${c.id}</div>
+      </div>
+    `).join("") || `<div class="comboItem"><div class="miniTag">ვერ მოიძებნა…</div></div>`;
+
+    editClientList.querySelectorAll("[data-id]").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        const id = Number(el.dataset.id);
+        const c = editClientsCache.find(x => Number(x.id) === id);
+        if(c) setSelectedEditClient(c);
+      });
+    });
+  }
+
+  async function loadClients(q=""){
+    q = (q || "").trim();
+    if(!q){
+      clientsCache = [];
+      renderClientList();
+      setSelectedClient(null);
+      return;
+    }
+
+    const res = await fetch(`/api/clients/?search=${encodeURIComponent(q)}`);
+    if(!res.ok){
+      toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა");
+      return;
+    }
+
+    let data = await res.json();
+    if(data.results) data = data.results;
+    clientsCache = Array.isArray(data) ? data : [];
+    renderClientList();
+  }
+
+  async function loadEditClients(q=""){
+    q = (q || "").trim();
+    if(!q){
+      editClientsCache = [];
+      renderEditClientList();
+      setSelectedEditClient(null);
+      return;
+    }
+
+    const res = await fetch(`/api/clients/?search=${encodeURIComponent(q)}`);
+    if(!res.ok){
+      toast("bad","შეცდომა","კლიენტები ვერ ჩაიტვირთა");
+      return;
+    }
+
+    let data = await res.json();
+    if(data.results) data = data.results;
+    editClientsCache = Array.isArray(data) ? data : [];
+    renderEditClientList();
+  }
+
+  let clientSearchTimer = null;
+  clientSearch.addEventListener("input", ()=>{
+    clearTimeout(clientSearchTimer);
+    clientSearchTimer = setTimeout(async ()=>{
+      const q = clientSearch.value.trim();
+      if(!q){
+        clientsCache = [];
+        renderClientList();
+        hideClientList();
+        return;
+      }
+      await loadClients(q);
+      showClientList();
+    }, 300);
+  });
+
+  let editClientSearchTimer = null;
+  editClientSearch.addEventListener("input", ()=>{
+    clearTimeout(editClientSearchTimer);
+    editClientSearchTimer = setTimeout(async ()=>{
+      const q = editClientSearch.value.trim();
+      if(!q){
+        editClientsCache = [];
+        renderEditClientList();
+        hideEditClientList();
+        return;
+      }
+      await loadEditClients(q);
+      showEditClientList();
+    }, 300);
+  });
+
+  document.addEventListener("click", (e)=>{
+    const wrap = clientSearch.closest(".combo");
+    if(wrap && !wrap.contains(e.target)) hideClientList();
+
+    const editWrap = editClientSearch.closest(".combo");
+    if(editWrap && !editWrap.contains(e.target)) hideEditClientList();
+  });
+
+  function renderCardPayments(items){
+    cardPaymentsCache = Array.isArray(items) ? items.slice() : [];
+    const tb = $("cp_tbody");
+    tb.innerHTML = "";
+
+    cardPaymentsCache.forEach(p=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${fmtDT(p.operation_date)}</td>
+        <td>${p.client_name || "—"}</td>
+        <td style="font-weight:900">${fmtMoney(p.amount)}</td>
+        <td>${fmtDT(p.created_at)}</td>
+        <td>
+          <div class="tdActions">
+            <button class="btn" data-edit="${p.id}" type="button">✏️ რედაქტირება</button>
+            <button class="btn danger" data-del="${p.id}" type="button">🗑️ წაშლა</button>
+          </div>
+        </td>
+      `;
+      tb.appendChild(tr);
+    });
+
+    tb.querySelectorAll("[data-edit]").forEach(btn=>{
+      btn.addEventListener("click", ()=> openEdit(Number(btn.dataset.edit)));
+    });
+
+    tb.querySelectorAll("[data-del]").forEach(btn=>{
+      btn.addEventListener("click", ()=> deleteCardPayment(Number(btn.dataset.del)));
+    });
+  }
+
+  async function loadCardPayments(q=""){
+    const query = (q || "").trim();
+    const today = todayStr();
+
+    let url = "/api/card-payments/?";
+    if(query){
+      url += `search=${encodeURIComponent(query)}`;
+    } else {
+      url += `date_from=${today}&date_to=${today}`;
+    }
+
+    const res = await fetch(url);
+    if(!res.ok){
+      toast("bad","შეცდომა","ბარათის გადახდები ვერ ჩაიტვირთა");
+      return;
+    }
+
+    let data = await res.json();
+    if(data.results) data = data.results;
+    renderCardPayments(data);
+  }
+
+  function setDefaultOperationDate(){
+    $("cp_operation_date").value = toLocalInputValue(new Date());
+  }
+
+  $("btnSaveCardPay").addEventListener("click", async ()=>{
+    const client = $("cp_client_id").value;
+    const amount = parseNum($("cp_amount").value);
+
+    if(!client || amount === null){
+      toast("bad","შეცდომა","შეავსე: კლიენტი და თანხა");
+      return;
+    }
+
+    const payload = {
+      client: Number(client),
+      amount: amount,
+      operation_date: localInputToISO($("cp_operation_date").value)
+    };
+
+    const res = await fetch("/api/card-payments/", {
+      method:"POST",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      body: JSON.stringify(payload)
+    });
+
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok){
+      toast("bad","ვერ შესრულდა", data.detail || JSON.stringify(data));
+      return;
+    }
+
+    toast("ok","OK", `შენახულია ✅ თანხა: ${fmtMoney(data.amount)}₾`);
+    $("cp_amount").value = "";
+    setDefaultOperationDate();
+    await loadCardPayments($("cp_search").value);
+  });
+
+  const overlayEdit = $("overlayEditCardPay");
+
+  async function openEdit(id){
+    const p = cardPaymentsCache.find(x => Number(x.id) === Number(id));
+    if(!p){
+      toast("bad","შეცდომა","ჩანაწერი ვერ მოიძებნა");
+      return;
+    }
+
+    editingId = id;
+    $("ecpTitle").textContent = `რედაქტირება • Card Payment #${id}`;
+
+    await loadEditClients(p.client_name || "");
+    setSelectedEditClient({
+      id: p.client,
+      first_name: (p.client_name || "").split(" ")[0] || "",
+      last_name: (p.client_name || "").split(" ").slice(1).join(" ") || "",
+      passId: "",
+      phone: "",
+      card_number: ""
+    });
+
+    $("ecp_amount").value = fmtMoney(p.amount);
+    $("ecp_operation_date").value = isoToLocalInputValue(p.operation_date);
+    overlayEdit.classList.add("show");
+  }
+
+  function closeEdit(){
+    overlayEdit.classList.remove("show");
+    editingId = null;
+  }
+
+  $("ecpClose").addEventListener("click", closeEdit);
+  $("btnCancelEditCardPay").addEventListener("click", closeEdit);
+  overlayEdit.addEventListener("click", (e)=>{ if(e.target === overlayEdit) closeEdit(); });
+
+  $("btnSaveEditCardPay").addEventListener("click", async ()=>{
+    if(!editingId) return;
+
+    const client = $("ecp_client_id").value;
+    const amount = parseNum($("ecp_amount").value);
+
+    if(!client || amount === null){
+      toast("bad","შეცდომა","შეავსე: კლიენტი და თანხა");
+      return;
+    }
+
+    const payload = {
+      client: Number(client),
+      amount: amount,
+      operation_date: localInputToISO($("ecp_operation_date").value)
+    };
+
+    const res = await fetch(`/api/card-payments/${editingId}/`, {
+      method:"PATCH",
+      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
+      body: JSON.stringify(payload)
+    });
+
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok){
+      toast("bad","ვერ შეინახა", data.detail || JSON.stringify(data));
+      return;
+    }
+
+    toast("ok","OK", `განახლდა ✅ თანხა: ${fmtMoney(data.amount)}₾`);
+    closeEdit();
+    await loadCardPayments($("cp_search").value);
+  });
+
+  async function deleteCardPayment(id){
+    const p = cardPaymentsCache.find(x => Number(x.id) === Number(id));
+    const label = p ? `${p.client_name || ""} • ${fmtMoney(p.amount)}₾` : `Card Payment #${id}`;
+
+    if(!confirm(`დარწმუნებული ხარ რომ წაშალო?\n${label}`)) return;
+
+    const res = await fetch(`/api/card-payments/${id}/`, {
+      method:"DELETE",
+      headers: {"X-CSRFToken": csrftoken}
+    });
+
+    if(!res.ok){
+      let err = {};
+      try{ err = await res.json(); }catch(e){}
+      toast("bad","ვერ წაიშალა", err.detail || JSON.stringify(err) || "შეცდომა");
+      return;
+    }
+
+    toast("ok","OK","წაიშალა ✅");
+    await loadCardPayments($("cp_search").value);
+  }
+
+  $("btnCardPaySearch").addEventListener("click", async ()=>{
+    await loadCardPayments($("cp_search").value);
+  });
+
+  $("btnCardPaySearchReset").addEventListener("click", async ()=>{
+    $("cp_search").value = "";
+    await loadCardPayments("");
+  });
+
+  $("cp_search").addEventListener("keydown", async (e)=>{
+    if(e.key === "Enter"){
+      await loadCardPayments($("cp_search").value);
+    }
+  });
+
+  const overlayNewClient = $("overlayNewClient");
+
+  function openNewClient(){ overlayNewClient.classList.add("show"); }
+  function closeNewClient(){ overlayNewClient.classList.remove("show"); }
+
+  function clearNewClientForm(){
+    ["nc_first","nc_last","nc_passid","nc_phone","nc_email","nc_org","nc_card","nc_comment"].forEach(id=>$(id).value="");
+    $("nc_birth").value = "";
+    $("nc_gender").value = "";
+    $("nc_photo").value = "";
+  }
+
+  $("btnOpenNewClient").addEventListener("click", openNewClient);
+  $("cClose").addEventListener("click", closeNewClient);
+  $("btnCancelClient").addEventListener("click", closeNewClient);
+  overlayNewClient.addEventListener("click", (e)=>{ if(e.target === overlayNewClient) closeNewClient(); });
+
+  $("btnSaveClient").addEventListener("click", async ()=>{
+    const first_name = $("nc_first").value.trim();
+    const last_name = $("nc_last").value.trim();
+    const passId = $("nc_passid").value.trim();
+    const phone = $("nc_phone").value.trim();
+
+    if(!first_name || !last_name || !phone || !passId){
+      toast("bad","შეცდომა","შეავსე: სახელი, გვარი, passId, ტელეფონი");
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append("first_name", first_name);
+    fd.append("last_name", last_name);
+    fd.append("passId", passId);
+    fd.append("phone", phone);
+    fd.append("birth_date", $("nc_birth").value);
+    fd.append("gender", $("nc_gender").value);
+    fd.append("email", $("nc_email").value.trim());
+    fd.append("organization", $("nc_org").value.trim());
+
+    const cardRaw = $("nc_card").value.trim();
+    const cardNumber = cardRaw ? parseInt(cardRaw, 10) : "";
+    if (cardRaw && Number.isNaN(cardNumber)) {
+      toast("bad", "შეცდომა", "ბარათის ნომერი უნდა იყოს მხოლოდ რიცხვი.");
+      return;
+    }
+
+    fd.append("card_number", cardNumber);
+    fd.append("comment", $("nc_comment").value.trim());
+
+    const photo = $("nc_photo").files[0];
+    if(photo) fd.append("photo", photo);
+
+    const res = await fetch("/api/clients/", {
+      method:"POST",
+      headers: { "X-CSRFToken": csrftoken },
+      body: fd
+    });
+
+    let data = {};
+    try{ data = await res.json(); }catch(e){}
+
+    if(!res.ok){
+      toast("bad","ვერ შეინახა", data.detail || (data.passId && data.passId[0]) || JSON.stringify(data));
+      return;
+    }
+
+    toast("ok","OK","კლიენტი დაემატა ✅");
+    closeNewClient();
+    clearNewClientForm();
+    clientsCache.unshift(data);
+    setSelectedClient(data);
+    renderClientList();
+  });
+
+  $("btnReload").addEventListener("click", async ()=>{
+    clientsCache = [];
+    editClientsCache = [];
+    cardPaymentsCache = [];
+    clientSearch.value = "";
+    $("cp_search").value = "";
+    $("cp_amount").value = "";
+    renderClientList();
+    setSelectedClient(null);
+    setDefaultOperationDate();
+    await loadCardPayments("");
+    toast("ok","OK","განახლდა");
+  });
+
+  (async ()=>{
+    clientsCache = [];
+    editClientsCache = [];
+    cardPaymentsCache = [];
+    renderClientList();
+    $("ecp_client_label").value = "—";
+    $("ecp_client_id").value = "";
+    setSelectedClient(null);
+    setDefaultOperationDate();
+    await loadCardPayments("");
+  })();
+</script>
+{% endblock %}

@@ -16,6 +16,24 @@ class Trainer(models.Model):
         return f"{self.first_name} {self.last_name}"
 
 
+
+class CardPayment(models.Model):
+    client = models.ForeignKey("Client", on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    operation_date = models.DateTimeField(
+        "ოპერაციის თარიღი",
+        null=True, blank=True,
+        default=timezone.now,
+        db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    def __str__(self):
+        return f"{self.client} {self.amount} {self.operation_date}"
+
+
+
+
+
 class Membership(models.Model):
     TYPE_CHOICES = (
         ("unlimited", "ულიმიტო (დღეებით)"),

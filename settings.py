@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-q^ga3frvp$_wkzk5q@c=61*gl3j@rp14ji_wsg9hx=jk-wq8$z
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -144,12 +144,5 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 
 
-
-ipSettings = "172.26.0.245"
-# ipSettings = "192.168.10.225"
-
-
-
-LOGIN_URL = "/login/"
-LOGIN_REDIRECT_URL = "/"
-LOGOUT_REDIRECT_URL = "/login/"
+ipSettings = "192.168.10.225"
+# ipSettings = "172.26.0.245"

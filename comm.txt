@@ -5,6 +5,8 @@ cd C:\Users\ikopaliani2707\Desktop\gym\gym
 watchmedo auto-restart --patterns="*.py" --recursive -- python -m daphne gym.asgi:application
 
 
+თეიმურაზ ბოჭორისშვილის 3
+
 
 cd C:\Users\ikopaliani2707\Desktop\gym\python 32 bit\.env\Scripts
 activate
@@ -79,7 +81,7 @@ python manage.py import_clients import_client.xlsx
 
 206968826
 
-Qweqwe1!
+qweqwe1!
 
 
 
