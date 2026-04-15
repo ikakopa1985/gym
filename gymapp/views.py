@@ -248,23 +248,25 @@ class ClientMembershipViewSet(viewsets.ModelViewSet):
 
 class ReportsViewSet(viewsets.ViewSet):
 
+    def _parse_date(self, s):
+        if not s:
+            return None
+        try:
+            y, m, d = str(s).split("-")
+            return timezone.datetime(int(y), int(m), int(d)).date()
+        except Exception:
+            return None
 
     @action(detail=False, methods=["get"])
     def active_members_by_trainer(self, request):
-        """
-        დღეს აქტიური კლიენტები ტრენერების მიხედვით (ბოლო Membership Payment-ის trainer-ით)
-        """
         today = timezone.localdate()
 
-        # აქტიური ClientMembership-ები დღეს
         active_cms = ClientMembership.objects.select_related("client").filter(status="active").filter(
             Q(membership__membership_type="limited", remaining_visits__gt=0) |
             Q(membership__membership_type="unlimited", end_date__gte=today) |
             Q(membership__membership_type="fixed", start_date__lte=today, end_date__gte=today)
         )
 
-        # თითო client-ზე ვიპოვოთ ბოლო payment სადაც membership != null (აბონემენტის გაყიდვა)
-        # (სწრაფი გზა: payments-ით group)
         latest_payments = (
             Payment.objects.filter(membership__isnull=False)
             .values("client_id")
@@ -274,13 +276,11 @@ class ReportsViewSet(viewsets.ViewSet):
 
         last_payments = Payment.objects.select_related("trainer").filter(id__in=last_ids)
 
-        # map client -> trainer_name
         client_to_trainer = {}
         for p in last_payments:
             tname = str(p.trainer) if p.trainer else "უტრენერო"
             client_to_trainer[p.client_id] = tname
 
-        # ახლა დავაჯგუფოთ active clients trainer-ზე
         buckets = {}
         for cm in active_cms:
             tname = client_to_trainer.get(cm.client_id, "უტრენერო")
@@ -296,54 +296,33 @@ class ReportsViewSet(viewsets.ViewSet):
         ]
         rows.sort(key=lambda r: r["count"], reverse=True)
 
-        return Response({"rows": rows, "total_active": active_cms.values("client_id").distinct().count()})
-
-    def _parse_date(self, s):
-        if not s:
-            return None
-        try:
-            y, m, d = str(s).split("-")
-            return timezone.datetime(int(y), int(m), int(d)).date()
-        except Exception:
-            return None
+        return Response({
+            "rows": rows,
+            "total_active": active_cms.values("client_id").distinct().count()
+        })
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
-
         today = timezone.localdate()
         month_start = today.replace(day=1)
 
-        # Checkins
-        today_checkins = CheckIn.objects.filter(
-            created_at__date=today
-        ).count()
+        today_checkins = CheckIn.objects.filter(created_at__date=today).count()
 
-        # Payments
-        payments_today = Payment.objects.filter(
-            operation_date__date=today
-        )
+        payments_today = Payment.objects.filter(operation_date__date=today)
+        payments_month = Payment.objects.filter(operation_date__date__gte=month_start)
 
-        payments_month = Payment.objects.filter(
-            operation_date__date__gte=month_start
-        )
-
-        # მხოლოდ დღეს გაყიდული აბონემენტები
         memberships_sold_today_qs = payments_today.filter(membership__isnull=False)
         memberships_sold_today_count = memberships_sold_today_qs.count()
         memberships_sold_today_amount = memberships_sold_today_qs.aggregate(
             s=Coalesce(Sum("amount"), Decimal("0.00"))
         )["s"]
 
-        # მხოლოდ დღეს ბარათის თანხები
-        card_payments_today_qs = CardPayment.objects.filter(
-            operation_date__date=today
-        )
+        card_payments_today_qs = CardPayment.objects.filter(operation_date__date=today)
         card_payments_today_count = card_payments_today_qs.count()
         card_payments_today_amount = card_payments_today_qs.aggregate(
             s=Coalesce(Sum("amount"), Decimal("0.00"))
         )["s"]
 
-        # totals
         today_income = payments_today.aggregate(
             s=Coalesce(Sum("amount"), Decimal("0.00"))
         )["s"]
@@ -352,34 +331,30 @@ class ReportsViewSet(viewsets.ViewSet):
             s=Coalesce(Sum("amount"), Decimal("0.00"))
         )["s"]
 
-        # by method
         def by_method(qs, method):
             return qs.filter(method=method).aggregate(
                 s=Coalesce(Sum("amount"), Decimal("0.00"))
             )["s"]
 
-        # active / expired
         active_memberships = ClientMembership.objects.filter(status="active").count()
         expired_memberships = ClientMembership.objects.filter(status="expired").count()
 
         return Response({
             "today_checkins": today_checkins,
+            "today_income": float(today_income or 0),
+            "month_income": float(month_income or 0),
 
-            "today_income": float(today_income),
-            "month_income": float(month_income),
+            "today_cash": float(by_method(payments_today, "cash") or 0),
+            "today_card": float(by_method(payments_today, "card") or 0),
+            "today_transfer": float(by_method(payments_today, "transfer") or 0),
 
-            "today_cash": float(by_method(payments_today, "cash")),
-            "today_card": float(by_method(payments_today, "card")),
-            "today_transfer": float(by_method(payments_today, "transfer")),
-
-            "month_cash": float(by_method(payments_month, "cash")),
-            "month_card": float(by_method(payments_month, "card")),
-            "month_transfer": float(by_method(payments_month, "transfer")),
+            "month_cash": float(by_method(payments_month, "cash") or 0),
+            "month_card": float(by_method(payments_month, "card") or 0),
+            "month_transfer": float(by_method(payments_month, "transfer") or 0),
 
             "active_memberships": active_memberships,
             "expired_memberships": expired_memberships,
 
-            # ახალი ველები
             "memberships_sold_today_count": memberships_sold_today_count,
             "memberships_sold_today_amount": float(memberships_sold_today_amount or 0),
 
@@ -391,7 +366,6 @@ class ReportsViewSet(viewsets.ViewSet):
     def payments(self, request):
         qs = Payment.objects.select_related("client", "membership", "trainer").all()
 
-        # --- date range (operation_date)
         dfrom = self._parse_date(request.query_params.get("date_from"))
         dto = self._parse_date(request.query_params.get("date_to"))
         if dfrom:
@@ -399,7 +373,6 @@ class ReportsViewSet(viewsets.ViewSet):
         if dto:
             qs = qs.filter(operation_date__date__lte=dto)
 
-        # --- multi: trainer (id or "null")
         trainer_vals = request.query_params.getlist("trainer")
         if trainer_vals:
             q_tr = Q()
@@ -410,12 +383,10 @@ class ReportsViewSet(viewsets.ViewSet):
                     q_tr |= Q(trainer_id=int(v))
             qs = qs.filter(q_tr)
 
-        # --- multi: method
         method_vals = request.query_params.getlist("method")
         if method_vals:
             qs = qs.filter(method__in=method_vals)
 
-        # --- multi: membership (id or "null")
         membership_vals = request.query_params.getlist("membership")
         if membership_vals:
             q_m = Q()
@@ -426,22 +397,20 @@ class ReportsViewSet(viewsets.ViewSet):
                     q_m |= Q(membership_id=int(v))
             qs = qs.filter(q_m)
 
-        # --- multi: client ids
         client_vals = request.query_params.getlist("client")
         if client_vals:
             qs = qs.filter(client_id__in=[int(x) for x in client_vals])
 
-        # --- free text search
         q = (request.query_params.get("q") or "").strip()
         if q:
             qs = qs.filter(
                 Q(client__first_name__icontains=q) |
                 Q(client__last_name__icontains=q) |
                 Q(client__phone__icontains=q) |
-                Q(client__card_number__icontains=q)
+                Q(client__card_number__icontains=q) |
+                Q(client__passId__icontains=q)
             )
 
-        # --- amount range
         min_amount = request.query_params.get("min_amount")
         max_amount = request.query_params.get("max_amount")
         if min_amount not in (None, ""):
@@ -449,18 +418,15 @@ class ReportsViewSet(viewsets.ViewSet):
         if max_amount not in (None, ""):
             qs = qs.filter(amount__lte=max_amount)
 
-        # ✅ “აბონემენტი გაიყიდა” = membership != null
         membership_sold_qs = qs.filter(membership__isnull=False)
 
         stats = {
             "payments_count": qs.count(),
             "total_amount": float(qs.aggregate(s=Sum("amount"))["s"] or 0),
-
             "memberships_sold_count": membership_sold_qs.count(),
             "memberships_sold_amount": float(membership_sold_qs.aggregate(s=Sum("amount"))["s"] or 0),
         }
 
-        # ✅ breakdown: by trainer (მხოლოდ გაყიდული აბონემენტები)
         by_trainer = (
             membership_sold_qs
             .values("trainer_id", "trainer__first_name", "trainer__last_name")
@@ -472,7 +438,7 @@ class ReportsViewSet(viewsets.ViewSet):
             {
                 "trainer_id": r["trainer_id"],
                 "trainer_name": (f'{r["trainer__first_name"] or ""} {r["trainer__last_name"] or ""}').strip()
-                               if r["trainer_id"] else "უტრენერო",
+                if r["trainer_id"] else "უტრენერო",
                 "count": int(r["cnt"] or 0),
                 "total": float(r["total"] or 0),
                 "is_without_trainer": (r["trainer_id"] is None),
@@ -507,6 +473,176 @@ class ReportsViewSet(viewsets.ViewSet):
             "stats": stats,
             "rows": rows,
             "clients": clients,
+        })
+
+    @action(detail=False, methods=["get"])
+    def membership_sales(self, request):
+        qs = Payment.objects.select_related("client", "trainer", "membership").filter(
+            membership__isnull=False
+        )
+
+        dfrom = self._parse_date(request.query_params.get("date_from"))
+        dto = self._parse_date(request.query_params.get("date_to"))
+        if dfrom:
+            qs = qs.filter(operation_date__date__gte=dfrom)
+        if dto:
+            qs = qs.filter(operation_date__date__lte=dto)
+
+        trainer_vals = request.query_params.getlist("trainer")
+        if trainer_vals:
+            q_tr = Q()
+            for v in trainer_vals:
+                if str(v).lower() == "null":
+                    q_tr |= Q(trainer__isnull=True)
+                else:
+                    q_tr |= Q(trainer_id=int(v))
+            qs = qs.filter(q_tr)
+
+        method_vals = request.query_params.getlist("method")
+        if method_vals:
+            qs = qs.filter(method__in=method_vals)
+
+        membership_vals = request.query_params.getlist("membership")
+        if membership_vals:
+            qs = qs.filter(membership_id__in=[int(x) for x in membership_vals])
+
+        client_vals = request.query_params.getlist("client")
+        if client_vals:
+            qs = qs.filter(client_id__in=[int(x) for x in client_vals])
+
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(client__first_name__icontains=q) |
+                Q(client__last_name__icontains=q) |
+                Q(client__phone__icontains=q) |
+                Q(client__card_number__icontains=q) |
+                Q(client__passId__icontains=q)
+            )
+
+        rows = [
+            {
+                "id": p.id,
+                "date": p.operation_date,
+                "client_id": p.client_id,
+                "client_name": str(p.client),
+                "membership_id": p.membership_id,
+                "membership_name": p.membership.name if p.membership else None,
+                "membership_amount": float(p.membership_amount or 0),
+                "trainer_id": p.trainer_id,
+                "trainer_name": str(p.trainer) if p.trainer else "უტრენერო",
+                "method": p.method,
+            }
+            for p in qs.order_by("-operation_date", "-id")[:3000]
+        ]
+
+        total = qs.aggregate(s=Coalesce(Sum("membership_amount"), Decimal("0.00")))["s"]
+
+        return Response({
+            "count": qs.count(),
+            "total_membership_amount": float(total or 0),
+            "rows": rows,
+        })
+
+    @action(detail=False, methods=["get"])
+    def card_payments_report(self, request):
+        qs = CardPayment.objects.select_related("client").all()
+
+        dfrom = self._parse_date(request.query_params.get("date_from"))
+        dto = self._parse_date(request.query_params.get("date_to"))
+        if dfrom:
+            qs = qs.filter(operation_date__date__gte=dfrom)
+        if dto:
+            qs = qs.filter(operation_date__date__lte=dto)
+
+        client_vals = request.query_params.getlist("client")
+        if client_vals:
+            qs = qs.filter(client_id__in=[int(x) for x in client_vals])
+
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(client__first_name__icontains=q) |
+                Q(client__last_name__icontains=q) |
+                Q(client__phone__icontains=q) |
+                Q(client__card_number__icontains=q) |
+                Q(client__passId__icontains=q)
+            )
+
+        min_amount = request.query_params.get("min_amount")
+        max_amount = request.query_params.get("max_amount")
+        if min_amount not in (None, ""):
+            qs = qs.filter(amount__gte=min_amount)
+        if max_amount not in (None, ""):
+            qs = qs.filter(amount__lte=max_amount)
+
+        rows = [
+            {
+                "id": r.id,
+                "date": r.operation_date,
+                "client_id": r.client_id,
+                "client_name": str(r.client),
+                "amount": float(r.amount or 0),
+            }
+            for r in qs.order_by("-operation_date", "-id")[:3000]
+        ]
+
+        total = qs.aggregate(s=Coalesce(Sum("amount"), Decimal("0.00")))["s"]
+
+        return Response({
+            "count": qs.count(),
+            "total_amount": float(total or 0),
+            "rows": rows,
+        })
+
+    @action(detail=False, methods=["get"])
+    def active_clients_report(self, request):
+        today = timezone.localdate()
+
+        qs = ClientMembership.objects.select_related("client", "membership").filter(
+            status="active"
+        ).filter(
+            Q(membership__membership_type="limited", remaining_visits__gt=0) |
+            Q(membership__membership_type="unlimited", end_date__gte=today) |
+            Q(membership__membership_type="fixed", start_date__lte=today, end_date__gte=today)
+        )
+
+        membership_vals = request.query_params.getlist("membership")
+        if membership_vals:
+            qs = qs.filter(membership_id__in=[int(x) for x in membership_vals])
+
+        client_vals = request.query_params.getlist("client")
+        if client_vals:
+            qs = qs.filter(client_id__in=[int(x) for x in client_vals])
+
+        q = (request.query_params.get("q") or "").strip()
+        if q:
+            qs = qs.filter(
+                Q(client__first_name__icontains=q) |
+                Q(client__last_name__icontains=q) |
+                Q(client__phone__icontains=q) |
+                Q(client__card_number__icontains=q) |
+                Q(client__passId__icontains=q)
+            )
+
+        rows = [
+            {
+                "id": cm.id,
+                "client_id": cm.client_id,
+                "client_name": str(cm.client),
+                "membership_id": cm.membership_id,
+                "membership_name": cm.membership.name if cm.membership else None,
+                "start_date": cm.start_date,
+                "end_date": cm.end_date,
+                "remaining_visits": cm.remaining_visits,
+                "status": cm.status,
+            }
+            for cm in qs.order_by("client__last_name", "client__first_name")[:3000]
+        ]
+
+        return Response({
+            "count": qs.values("client_id").distinct().count(),
+            "rows": rows,
         })
 
 
@@ -1189,3 +1325,5 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("login")
+
+
