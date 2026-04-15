@@ -41,6 +41,23 @@ zktIp =  ipSettings
 # =========================
 @login_required
 def index(request):
+    # client = Client.objects.all()
+    # for item in client:
+    #     name = item.first_name
+    #
+    #     name = name.replace("j", "ჯ")
+    #     name = name.replace("C", "ჩ")
+    #
+    #
+    #     item.first_name = name
+    #     item.save()
+    #
+    #     last_name = item.last_name
+    #     last_name = last_name.replace("j", "ჯ")
+    #     last_name = last_name.replace("C", "ჩ")
+    #     item.last_name = last_name
+    #     item.save()
+
     return render(request, "index.html")
 
 @login_required
