@@ -748,44 +748,37 @@ async function loadClients(q=""){
   }
 
   function setFixedDates(){
-    const today = new Date();
+  const today = new Date();
 
-    const startYear = today.getFullYear();
-    const startMonth = today.getMonth();
-    const startDay = today.getDate();
+  const startYear = today.getFullYear();
+  const startMonth = today.getMonth();
+  const startDay = today.getDate();
 
-    const start = `${startYear}-${String(startMonth + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+  const start = `${startYear}-${String(startMonth + 1).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
 
-    let endYear = startYear;
-    let endMonth = startMonth + 1;
+  let endYear = startYear;
+  let endMonth = startMonth + 1;
 
-    if (endMonth > 11) {
-      endMonth = 0;
-      endYear++;
-    }
-
-    const daysInStartMonth = new Date(startYear, startMonth + 1, 0).getDate();
-    const daysInEndMonth = new Date(endYear, endMonth + 1, 0).getDate();
-
-    // let subtractDays = 0;
-    let subtractDays = 2;
-
-    // if (daysInStartMonth === 31) {
-    //   subtractDays = 2;
-    // } else if (daysInStartMonth === 30) {
-    //   subtractDays = 1;
-    // }
-
-    let endDay = startDay - subtractDays;
-
-    if (endDay < 1) endDay = 1;
-    if (endDay > daysInEndMonth) endDay = daysInEndMonth;
-
-    const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
-
-    $("p_fixed_start").value = start;
-    $("p_fixed_end").value = end;
+  if (endMonth > 11) {
+    endMonth = 0;
+    endYear++;
   }
+
+  const daysInStartMonth = new Date(startYear, startMonth + 1, 0).getDate();
+  const daysInEndMonth = new Date(endYear, endMonth + 1, 0).getDate();
+
+  let subtractDays = daysInStartMonth === 31 ? 2 : daysInStartMonth === 30 ? 1 : 0;
+
+  let endDay = startDay - subtractDays;
+
+  if (endDay < 1) endDay = 1;
+  if (endDay > daysInEndMonth) endDay = daysInEndMonth;
+
+  const end = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
+
+  $("p_fixed_start").value = start;
+  $("p_fixed_end").value = end;
+}
 
   $("p_membership").addEventListener("change", ()=>recalc("p"));
   $("p_trainer").addEventListener("change", ()=>recalc("p"));

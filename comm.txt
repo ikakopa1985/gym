@@ -81,6 +81,8 @@ python manage.py import_clients import_client.xlsx
 
 206968826
 
+1674802618
+
 qweqwe1!
 
 

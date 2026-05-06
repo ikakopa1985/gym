@@ -1268,6 +1268,12 @@ def sync_status(request):
 
 class CardPaymentSerializer(serializers.ModelSerializer):
     client_name = serializers.SerializerMethodField()
+    client_card_number = serializers.CharField(source="client.card_number", read_only=True)
+    client_first_name = serializers.CharField(source="client.first_name", read_only=True)
+    client_last_name = serializers.CharField(source="client.last_name", read_only=True)
+    client_phone = serializers.CharField(source="client.phone", read_only=True)
+    client_passId = serializers.CharField(source="client.passId", read_only=True)
+    client_comment = serializers.CharField(source="client.comment", read_only=True)
 
     class Meta:
         model = CardPayment
@@ -1275,7 +1281,14 @@ class CardPaymentSerializer(serializers.ModelSerializer):
             "id",
             "client",
             "client_name",
+            "client_card_number",
+            "client_first_name",
+            "client_last_name",
+            "client_phone",
+            "client_passId",
+            "client_comment",
             "amount",
+            "method",
             "operation_date",
             "created_at",
         ]
@@ -1314,6 +1327,60 @@ class CardPaymentViewSet(viewsets.ModelViewSet):
             qs = qs.filter(operation_date__date__lte=date_to)
 
         return qs
+
+    def create(self, request, *args, **kwargs):
+        client_id = request.data.get("client")
+        amount = request.data.get("amount")
+        operation_date = request.data.get("operation_date")
+        nc_card = request.data.get("nc_card")
+        method = request.data.get("method")
+
+        if not client_id or amount in (None, ""):
+            return Response({"detail": "client და amount აუცილებელია"}, status=400)
+
+        try:
+            client = Client.objects.get(id=client_id)
+        except Client.DoesNotExist:
+            return Response({"detail": "კლიენტი ვერ მოიძებნა"}, status=404)
+
+        if nc_card not in (None, "", "null"):
+            client.card_number = str(nc_card).strip()
+            client.save(update_fields=["card_number"])
+
+        serializer = self.get_serializer(data={
+            "client": client.id,
+            "amount": amount,
+            "method": method,  # ✅
+            "operation_date": operation_date,
+        })
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        client_id = request.data.get("client", instance.client_id)
+        nc_card = request.data.get("nc_card", None)
+
+        try:
+            client = Client.objects.get(id=client_id)
+        except Client.DoesNotExist:
+            return Response({"detail": "კლიენტი ვერ მოიძებნა"}, status=404)
+
+        if nc_card not in (None, "", "null"):
+            client.card_number = str(nc_card).strip()
+            client.save(update_fields=["card_number"])
+
+        data = request.data.copy()
+        data["client"] = client.id
+
+        serializer = self.get_serializer(instance, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response(serializer.data)
 
 
 

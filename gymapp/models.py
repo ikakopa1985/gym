@@ -18,8 +18,14 @@ class Trainer(models.Model):
 
 
 class CardPayment(models.Model):
+    PAYMENT_METHODS = (
+        ("cash", "ქეში"),
+        ("card", "ბარათი"),
+        ("transfer", "გადმორიცხვა"),
+    )
     client = models.ForeignKey("Client", on_delete=models.CASCADE)
     amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    method = models.CharField("გადახდის მეთოდი", max_length=20, choices=PAYMENT_METHODS, null=True, blank=True)
     operation_date = models.DateTimeField(
         "ოპერაციის თარიღი",
         null=True, blank=True,

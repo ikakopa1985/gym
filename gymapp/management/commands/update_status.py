@@ -2,6 +2,8 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from gymapp.models import ClientMembership
+from gymapp.models import ClientSync
+
 
 
 class Command(BaseCommand):
@@ -21,21 +23,29 @@ class Command(BaseCommand):
 
             expired = False
 
-            if mtype == "limited":
-                if (cm.remaining_visits or 0) <= 0:
-                    expired = True
-
-            elif mtype == "unlimited":
-                if cm.end_date and cm.end_date < today:
-                    expired = True
-
-            elif mtype == "fixed":
+            if mtype == "fixed":
                 if cm.end_date and cm.end_date < today:
                     expired = True
 
             if expired:
+
                 cm.status = "expired"
                 cm.save(update_fields=["status"])
+
+                # ZKT-დან წასაშლელი task
+                exists = ClientSync.objects.filter(
+                    client=cm.client,
+                    action="delete",
+                    status="pending"
+                ).exists()
+
+                if not exists:
+                    ClientSync.objects.create(
+                        client=cm.client,
+                        action="delete",
+                        status="pending"
+                    )
+
                 updated += 1
 
         self.stdout.write(
