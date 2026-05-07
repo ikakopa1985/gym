@@ -555,9 +555,17 @@ class ReportsViewSet(viewsets.ViewSet):
 
         total = qs.aggregate(s=Coalesce(Sum("membership_amount"), Decimal("0.00")))["s"]
 
+        def by_method(method):
+            return qs.filter(method=method).aggregate(
+                s=Coalesce(Sum("membership_amount"), Decimal("0.00"))
+            )["s"]
+
         return Response({
             "count": qs.count(),
             "total_membership_amount": float(total or 0),
+            "cash_amount": float(by_method("cash") or 0),
+            "card_amount": float(by_method("card") or 0),
+            "transfer_amount": float(by_method("transfer") or 0),
             "rows": rows,
         })
 
@@ -600,15 +608,24 @@ class ReportsViewSet(viewsets.ViewSet):
                 "client_id": r.client_id,
                 "client_name": str(r.client),
                 "amount": float(r.amount or 0),
+                "method": r.method,
             }
             for r in qs.order_by("-operation_date", "-id")[:3000]
         ]
 
         total = qs.aggregate(s=Coalesce(Sum("amount"), Decimal("0.00")))["s"]
 
+        def by_method(method):
+            return qs.filter(method=method).aggregate(
+                s=Coalesce(Sum("amount"), Decimal("0.00"))
+            )["s"]
+
         return Response({
             "count": qs.count(),
             "total_amount": float(total or 0),
+            "cash_amount": float(by_method("cash") or 0),
+            "card_amount": float(by_method("card") or 0),
+            "transfer_amount": float(by_method("transfer") or 0),
             "rows": rows,
         })
 

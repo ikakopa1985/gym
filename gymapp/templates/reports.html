@@ -126,7 +126,10 @@
     <!-- stats -->
     <div class="statRow">
       <div class="stat">რაოდენობა: <strong id="reportCount">0</strong></div>
-      <div class="stat" id="reportTotalBox">ჯამი: <strong id="reportTotal">0.00₾</strong></div>
+      <div class="stat" id="reportTotalBox">
+        ჯამი: <strong id="reportTotal">0.00₾</strong>
+        <span id="reportMethodTotals" style="margin-left:10px;font-size:13px;color:var(--text-muted,#888)"></span>
+      </div>
     </div>
 
     <!-- ==============================
@@ -316,7 +319,7 @@ async function loadReport(){
   if(activeTab === "membership_sales"){
     $("reportTotalBox").style.display = "";
     $("reportTotal").textContent = fmtMoney(data.total_membership_amount || 0);
-
+    renderMethodTotals(data);
     $("membershipSalesBody").innerHTML = (data.rows || []).map(r => `
       <tr>
         <td>${fmtDate(r.date)}</td>
@@ -332,7 +335,7 @@ async function loadReport(){
   if(activeTab === "card_payments"){
     $("reportTotalBox").style.display = "";
     $("reportTotal").textContent = fmtMoney(data.total_amount || 0);
-
+    renderMethodTotals(data);
     $("cardPaymentsBody").innerHTML = (data.rows || []).map(r => `
       <tr>
         <td>${fmtDate(r.date)}</td>
@@ -344,7 +347,7 @@ async function loadReport(){
 
   if(activeTab === "active_clients"){
     $("reportTotalBox").style.display = "none";
-
+    $("reportMethodTotals").innerHTML = "";
     $("activeClientsBody").innerHTML = (data.rows || []).map(r => `
       <tr>
         <td>${r.client_name || "—"}</td>
@@ -355,6 +358,14 @@ async function loadReport(){
       </tr>
     `).join("");
   }
+}
+
+function renderMethodTotals(data){
+  $("reportMethodTotals").innerHTML = `
+    ნაღდი: <b>${fmtMoney(data.cash_amount || 0)}</b> |
+    ბარათი: <b>${fmtMoney(data.card_amount || 0)}</b> |
+    ჩარიცხვა: <b>${fmtMoney(data.transfer_amount || 0)}</b>
+  `;
 }
 
 /* ── Event listeners ── */
