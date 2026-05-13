@@ -981,7 +981,13 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
                 today = timezone.localdate()
 
-                start_date = today
+                current_cm = client.active_membership
+
+                if current_cm and current_cm.end_date:
+                    start_date = current_cm.end_date + timedelta(days=1)
+                else:
+                    start_date = today
+
                 end_date = None
                 remaining_visits = None
 
@@ -1105,7 +1111,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 remaining_visits = None
 
                 if membership.membership_type == "unlimited":
-                    end_date = today + timedelta(days=int(membership.duration_days))
+                    end_date = start_date + timedelta(days=int(membership.duration_days))
 
                 elif membership.membership_type == "limited":
                     remaining_visits = int(membership.visit_count)

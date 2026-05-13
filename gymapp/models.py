@@ -102,13 +102,6 @@ class ClientMembership(models.Model):
             models.Index(fields=["end_date"]),
         ]
 
-        constraints = [
-            models.UniqueConstraint(
-                fields=["client"],
-                condition=Q(status="active"),
-                name="one_active_membership_per_client"
-            )
-        ]
 
     def is_active(self):
 
@@ -118,13 +111,20 @@ class ClientMembership(models.Model):
         today = timezone.localdate()
         mtype = self.membership.membership_type
 
+        if not self.start_date:
+            return False
+
         if mtype == "limited":
-            return (self.remaining_visits or 0) > 0
+            return self.start_date <= today and (self.remaining_visits or 0) > 0
 
         if mtype == "unlimited":
-            return self.end_date and self.end_date >= today
+            if not self.end_date:
+                return False
+            return self.start_date <= today <= self.end_date
 
         if mtype == "fixed":
+            if not self.end_date:
+                return False
             return self.start_date <= today <= self.end_date
 
         return False
