@@ -918,12 +918,28 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     cm.status = "expired"
                     cm.save(update_fields=["status"])
 
+    def _has_membership_overlap(self, client, start_date, end_date, exclude_cm_id=None):
+        qs = ClientMembership.objects.filter(client=client)
+
+        if exclude_cm_id:
+            qs = qs.exclude(id=exclude_cm_id)
+
+        # მარტო ისეთი ჩანაწერები, რომლებსაც პერიოდი აქვს
+        qs = qs.filter(start_date__isnull=False, end_date__isnull=False)
+
+        return qs.filter(
+            start_date__lte=end_date,
+            end_date__gte=start_date
+        ).exists()
+
+
     # ----------------------------------------------------
     # CREATE PAYMENT
     # ----------------------------------------------------
 
-    def create(self, request, *args, **kwargs):
 
+    def create(self, request, *args, **kwargs):
+        # print(request.data)
         with transaction.atomic():
 
             client_id = request.data.get("client")
@@ -964,6 +980,30 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 else membership_amount + trainer_fee
             )
 
+
+            today = timezone.localdate()
+
+            end_date = None
+            remaining_visits = None
+
+            if membership.membership_type == "unlimited":
+                end_date = today + timedelta(days=int(membership.duration_days))
+
+            elif membership.membership_type == "limited":
+                remaining_visits = int(membership.visit_count)
+
+            elif membership.membership_type == "fixed":
+                start_date = fixed_start
+                end_date = fixed_end
+
+            # პერიოდის კვეთის შემოწმება
+            if end_date and self._has_membership_overlap(client, start_date, end_date):
+                return Response({
+                    "detail": "ამ კლიენტს ამ პერიოდში უკვე აქვს აბონემენტი"
+                }, status=400)
+
+
+
             payment = Payment.objects.create(
                 client=client,
                 membership=membership,
@@ -977,41 +1017,17 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 operation_date=operation_date,
             )
 
-            if membership:
+            cm = ClientMembership.objects.create(
+                client=client,
+                membership=membership,
+                start_date=start_date,
+                end_date=end_date,
+                remaining_visits=remaining_visits,
+                status="active",
+            )
 
-                today = timezone.localdate()
-
-                current_cm = client.active_membership
-
-                if current_cm and current_cm.end_date:
-                    start_date = current_cm.end_date + timedelta(days=1)
-                else:
-                    start_date = today
-
-                end_date = None
-                remaining_visits = None
-
-                if membership.membership_type == "unlimited":
-                    end_date = today + timedelta(days=int(membership.duration_days))
-
-                elif membership.membership_type == "limited":
-                    remaining_visits = int(membership.visit_count)
-
-                elif membership.membership_type == "fixed":
-                    start_date = fixed_start
-                    end_date = fixed_end
-
-                cm = ClientMembership.objects.create(
-                    client=client,
-                    membership=membership,
-                    start_date=start_date,
-                    end_date=end_date,
-                    remaining_visits=remaining_visits,
-                    status="active",
-                )
-
-                payment.client_membership = cm
-                payment.save(update_fields=["client_membership"])
+            payment.client_membership = cm
+            payment.save(update_fields=["client_membership"])
 
             # 🔹 recalculation
             self._recalc_client_memberships(client)
@@ -1078,6 +1094,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 if total_override is not None
                 else membership_amount + trainer_fee
             )
+
+
+            if self._has_membership_overlap(client, fixed_start, fixed_end):
+                return Response({
+                    "detail": "ამ კლიენტს ამ პერიოდში უკვე აქვს აბონემენტი"
+                }, status=400)
 
             payment.client = client
             payment.membership = membership
@@ -1169,6 +1191,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
 
+        updated = 0
+
         payment = self.get_object()
 
         with transaction.atomic():
@@ -1176,14 +1200,27 @@ class PaymentViewSet(viewsets.ModelViewSet):
             client = payment.client
             cm = payment.client_membership
 
-            if cm:
-                cm.status = "expired"
-                cm.save(update_fields=["status"])
+            if cm.status == "active":
+                exists = ClientSync.objects.filter(
+                    client=cm.client,
+                    action="delete",
+                    status="pending"
+                ).exists()
+
+                if not exists:
+                    ClientSync.objects.create(
+                        client=cm.client,
+                        action="delete",
+                        status="pending"
+                    )
+                updated += 1
+
+            cm.delete()
 
             payment.delete()
 
             # 🔹 recalculation
-            self._recalc_client_memberships(client)
+            # self._recalc_client_memberships(client)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 

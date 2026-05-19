@@ -671,7 +671,6 @@ async function loadClients(q=""){
     membershipsCache = await res.json();
 
     const opts =
-      `<option value="">— აბონემენტის გარეშე —</option>` +
       membershipsCache.map(m => `
         <option value="${m.id}" data-price="${m.price}">
           ${m.name} • ${m.membership_type} • ${fmtMoney(m.price)}
