@@ -234,7 +234,7 @@ class TrainerViewSet(viewsets.ModelViewSet):
 
 
 class MembershipViewSet(viewsets.ModelViewSet):
-    queryset = Membership.objects.all().order_by("-id")
+    queryset = Membership.objects.all().order_by("id")
     serializer_class = MembershipSerializer
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ["name", "membership_type"]
@@ -920,7 +920,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     def _has_membership_overlap(self, client, start_date, end_date, exclude_cm_id=None):
         qs = ClientMembership.objects.filter(client=client)
-
+        print(exclude_cm_id)
         if exclude_cm_id:
             qs = qs.exclude(id=exclude_cm_id)
 
@@ -1096,7 +1096,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             )
 
 
-            if self._has_membership_overlap(client, fixed_start, fixed_end):
+            if self._has_membership_overlap(client, fixed_start, fixed_end, exclude_cm_id=payment.client_membership.id):
                 return Response({
                     "detail": "ამ კლიენტს ამ პერიოდში უკვე აქვს აბონემენტი"
                 }, status=400)

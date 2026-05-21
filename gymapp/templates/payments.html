@@ -799,6 +799,7 @@ async function loadClients(q=""){
 
   $("btnPay").addEventListener("click", async ()=>{
     const client = clientIdHidden.value;
+    // console.log(Number(client))
     const membership = $("p_membership").value || null;
     const trainer = $("p_trainer").value || null;
     const method = $("p_method").value;
@@ -837,7 +838,9 @@ async function loadClients(q=""){
 
   toast("ok","OK", `შენახულია ✅ სულ: ${fmtMoney(data.amount)}₾`);
 
-  $("p_membership").value = "";
+  $("p_client_id").value = "";
+  $("p_client_label").value = "—";
+  $("p_client_comment").textContent = "—";
   $("p_trainer").value = "";
   pTotalOverridden = false;
 
