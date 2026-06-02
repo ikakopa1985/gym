@@ -121,6 +121,19 @@
       <div class="filter-group" style="justify-content:flex-end">
         <button class="btn primary" id="btnLoadActive" type="button">ჩატვირთვა</button>
       </div>
+
+      <div class="filter-group">
+        <label class="filter-label">აქტიურები თარიღით</label>
+        <input type="date" id="activeStatDate" class="input">
+      </div>
+
+      <div class="filter-group" style="justify-content:flex-end">
+        <button class="btn primary" id="btnActiveStat" type="button">
+          აქტიურების დათვლა
+        </button>
+      </div>
+
+
     </div>
 
     <!-- stats -->
@@ -131,6 +144,29 @@
         <span id="reportMethodTotals" style="margin-left:10px;font-size:13px;color:var(--text-muted,#888)"></span>
       </div>
     </div>
+
+    <div id="activeStatBox" class="hidden" style="margin-bottom:16px">
+  <div class="statRow">
+    <div class="stat">
+      არჩეული თარიღი: <strong id="activeStatSelectedDate">—</strong>
+    </div>
+    <div class="stat">
+      ჯამში აქტიური: <strong id="activeStatTotal">0</strong>
+    </div>
+  </div>
+
+  <div class="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ტრენერი</th>
+          <th>აქტიური აბონემენტები</th>
+        </tr>
+      </thead>
+      <tbody id="activeStatBody"></tbody>
+    </table>
+  </div>
+</div>
 
     <!-- ==============================
          TABLES
@@ -298,6 +334,31 @@ function switchTab(tab){
   loadReport();
 }
 
+async function loadActiveStat(){
+  const date = $("activeStatDate").value;
+
+  if(!date){
+    alert("აირჩიე თარიღი");
+    return;
+  }
+
+  const res = await fetch(`/api/reports/active_members_by_date_trainer/?date=${date}`);
+  const data = await res.json();
+
+  $("activeStatBox").classList.remove("hidden");
+  $("activeStatSelectedDate").textContent = data.date || date;
+  $("activeStatTotal").textContent = data.total_active || 0;
+
+  $("activeStatBody").innerHTML = (data.rows || []).map(r => `
+    <tr>
+      <td>${r.trainer_name || "უტრენერო"}</td>
+      <td><strong>${r.count || 0}</strong></td>
+    </tr>
+  `).join("");
+}
+
+
+
 /* ── Load & render ── */
 async function loadReport(){
   const qs = buildQS();
@@ -369,6 +430,13 @@ function renderMethodTotals(data){
 }
 
 /* ── Event listeners ── */
+
+const activeStatBtn = $("btnActiveStat");
+if(activeStatBtn){
+  activeStatBtn.addEventListener("click", loadActiveStat);
+}
+
+
 document.querySelectorAll(".tab-btn").forEach(btn=>{
   btn.addEventListener("click", ()=>switchTab(btn.dataset.tab));
 });

@@ -265,6 +265,66 @@ class ClientMembershipViewSet(viewsets.ModelViewSet):
 
 class ReportsViewSet(viewsets.ViewSet):
 
+    @action(detail=False, methods=["get"])
+    def active_members_by_date_trainer(self, request):
+        selected_date = self._parse_date(request.query_params.get("date"))
+        if not selected_date:
+            selected_date = timezone.localdate()
+
+        qs = ClientMembership.objects.select_related(
+            "client", "membership"
+        ).filter(
+            status="active",
+            start_date__lte=selected_date
+        ).filter(
+            Q(membership__membership_type="limited", remaining_visits__gt=0) |
+            Q(membership__membership_type__in=["unlimited", "fixed"], end_date__gte=selected_date)
+        )
+
+        cm_ids = list(qs.values_list("id", flat=True))
+
+        payments = Payment.objects.select_related("trainer").filter(
+            client_membership_id__in=cm_ids
+        )
+
+        cm_to_trainer = {}
+        for p in payments:
+            cm_to_trainer[p.client_membership_id] = {
+                "trainer_id": p.trainer_id,
+                "trainer_name": str(p.trainer) if p.trainer else "უტრენერო",
+                "is_without_trainer": p.trainer_id is None,
+            }
+
+        buckets = {}
+
+        for cm in qs:
+            trainer = cm_to_trainer.get(cm.id, {
+                "trainer_id": None,
+                "trainer_name": "უტრენერო",
+                "is_without_trainer": True,
+            })
+
+            key = trainer["trainer_name"]
+
+            if key not in buckets:
+                buckets[key] = {
+                    "trainer_id": trainer["trainer_id"],
+                    "trainer_name": trainer["trainer_name"],
+                    "is_without_trainer": trainer["is_without_trainer"],
+                    "count": 0,
+                }
+
+            buckets[key]["count"] += 1
+
+        rows = list(buckets.values())
+        rows.sort(key=lambda x: x["count"], reverse=True)
+
+        return Response({
+            "date": str(selected_date),
+            "total_active": qs.values("client_id").distinct().count(),
+            "rows": rows,
+        })
+
     def _parse_date(self, s):
         if not s:
             return None
