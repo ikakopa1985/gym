@@ -339,12 +339,10 @@
     return toLocalInputValue(d);
   }
 
-  function localInputToISO(v){
-    if(!v) return null;
-    const d = new Date(v);
-    if(isNaN(d.getTime())) return null;
-    return d.toISOString();
-  }
+function localInputToISO(v){
+  if(!v) return null;
+  return v; // "2026-06-06T15:30" 그대로 გააგზავნოს, UTC-ში არ გადაიყვანოს
+}
 
   function fmtMoney(v){
     const n = Number(v ?? 0);

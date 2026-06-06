@@ -939,11 +939,14 @@ class PaymentViewSet(viewsets.ModelViewSet):
     def _parse_dt_or_none(self, s):
         if not s:
             return None
+
         dt = parse_datetime(str(s))
         if not dt:
             return None
+
         if timezone.is_naive(dt):
             dt = timezone.make_aware(dt, timezone.get_current_timezone())
+
         return dt
 
     def _parse_decimal_or_none(self, v):
@@ -1167,7 +1170,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment.fixed_start = fixed_start
             payment.fixed_end = fixed_end
             payment.method = method
-            payment.operation_date = operation_date or timezone.now()
+            payment.operation_date = operation_date if operation_date else payment.operation_date
             payment.membership_amount = membership_amount
             payment.trainer_fee = trainer_fee
             payment.amount = amount
