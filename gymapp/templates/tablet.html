@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ka">
+<head>
+  <meta charset="UTF-8">
+  <title>Tablet • Check-in</title>
+  <style>
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      min-height:100vh;
+      background:#071f24;
+      color:white;
+      font-family:Arial, sans-serif;
+      overflow:hidden;
+    }
+
+    .tabletPage{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+    }
+
+    .waitingBox{
+      width:min(760px,94vw);
+      border-radius:32px;
+      background:#0f2a30;
+      padding:42px;
+      text-align:center;
+      box-shadow:0 24px 70px rgba(0,0,0,.45);
+    }
+
+    .waitingBox h1{
+      font-size:42px;
+      margin:0 0 12px;
+    }
+
+    .waitingBox div{
+      font-size:22px;
+      opacity:.75;
+    }
+
+    #card-info{
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,.72);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      opacity:0;
+      pointer-events:none;
+      transition:.25s;
+      z-index:9999;
+    }
+
+    #card-info.show{
+      opacity:1;
+      pointer-events:auto;
+    }
+
+    .cardDialogBox{
+      width:min(720px,92vw);
+      min-height:min(760px,90vh);
+      background:#0f2a30;
+      border-radius:34px;
+      padding:34px;
+      text-align:center;
+      box-shadow:0 24px 70px rgba(0,0,0,.55);
+      transform:scale(.92);
+      transition:.25s;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:14px;
+    }
+
+    #card-info.show .cardDialogBox{
+      transform:scale(1);
+    }
+
+    #photo{
+      width:min(430px,70vw);
+      height:min(430px,70vw);
+      object-fit:cover;
+      border-radius:28px;
+      border:4px solid rgba(255,255,255,.25);
+      background:#092025;
+    }
+
+    #name{
+      font-size:40px;
+      margin:6px 0 0;
+      font-weight:900;
+    }
+
+    #card{
+      font-size:22px;
+      opacity:.85;
+    }
+
+    #membership{
+      font-size:24px;
+      font-weight:800;
+    }
+
+    #status{
+      font-size:44px;
+      font-weight:1000;
+      margin-top:8px;
+    }
+    .topBar{
+    position:fixed;
+    top:15px;
+    right:15px;
+    z-index:10000;
+    display:flex;
+    gap:10px;
+}
+
+.btnLogin,
+.btnLogout{
+    text-decoration:none;
+    padding:12px 18px;
+    border-radius:12px;
+    font-size:16px;
+    font-weight:700;
+    color:white;
+    transition:.2s;
+}
+
+.btnLogin{
+    background:#3498db;
+}
+
+.btnLogin:hover{
+    background:#2980b9;
+}
+
+.btnLogout{
+    background:#e74c3c;
+}
+
+.btnLogout:hover{
+    background:#c0392b;
+}
+  </style>
+</head>
+
+<body>
+
+
+<div class="topBar">
+<!--    <a href="/accounts/login/" class="btnLogin">🔐 შესვლა</a>-->
+    <a href="/accounts/logout/" class="btnLogout">🚪 გასვლა</a>
+</div>
+
+<div class="topBar">
+    {% if user.is_authenticated %}
+        <span style="color:white;padding:12px;">
+<!--            {{ user.username }}-->
+        </span>
+
+        <a href="{% url 'logout' %}" class="btnLogout">
+            🚪 გასვლა
+        </a>
+    {% else %}
+        <a href="{% url 'login' %}" class="btnLogin">
+            🔐   შესვლა
+        </a>
+    {% endif %}
+</div>
+
+<div class="tabletPage">
+<!--  <div class="waitingBox">-->
+<!--    <h1>ველოდებით ბარათს</h1>-->
+<!--    <div>ZKT შესვლისას აქ გამოჩნდება კლიენტის სტატუსი</div>-->
+<!--  </div>-->
+</div>
+
+<div id="card-info">
+  <div class="cardDialogBox">
+    <img id="photo" src="/static/no-photo.jpg">
+    <h2 id="name">—</h2>
+    <div id="card">Card: —</div>
+    <div id="membership">—</div>
+    <div id="status">—</div>
+  </div>
+</div>
+
+<script>
+const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+const socket = new WebSocket(protocol + window.location.host + "/ws/cards/");
+
+socket.onmessage = function(e){
+  const msg = JSON.parse(e.data);
+
+  document.getElementById("name").innerText =
+    `${msg.name || ""} ${msg.lastname || ""}`.trim() || "—";
+
+  document.getElementById("photo").src = msg.photo || "/static/no-photo.jpg";
+  document.getElementById("card").innerText = "Card: " + (msg.card || "—");
+
+  const membership = document.getElementById("membership");
+  const status = document.getElementById("status");
+
+  if(msg.status === "ok"){
+    membership.innerText = "Valid: " + (msg.start_date || "—") + " - " + (msg.end_date || "—");
+    status.innerText = "✅ ACTIVE";
+    status.style.color = "#2ecc71";
+  }else{
+    membership.innerText = "NO ACTIVE MEMBERSHIP";
+    status.innerText = "⛔ DENIED";
+    status.style.color = "#ff3b3b";
+  }
+
+  const dialog = document.getElementById("card-info");
+  dialog.classList.add("show");
+
+  if(window.cardTimer) clearTimeout(window.cardTimer);
+  window.cardTimer = setTimeout(()=>{
+    dialog.classList.remove("show");
+  }, 5000);
+};
+</script>
+
+</body>
+</html>

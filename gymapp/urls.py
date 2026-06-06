@@ -37,7 +37,7 @@ urlpatterns = [
     path("zk/stop/", zk_stop),
     path("zk/imitate/", zk_imitate),
 
-
+    path("tablet/", tablet_page, name="tablet"),
 
 
     # API endpoints:

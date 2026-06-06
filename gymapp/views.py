@@ -30,11 +30,21 @@ from django.db.models import Prefetch
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render, redirect
+
 from .models import *
 
 
 zktIp =  ipSettings
 
+
+@login_required
+def tablet_page(request):
+    if request.user.username != "planshet":
+        return redirect("index")
+
+    return render(request, "tablet.html")
 
 # =========================
 # HTML Views
@@ -57,6 +67,9 @@ def index(request):
     #     last_name = last_name.replace("C", "ჩ")
     #     item.last_name = last_name
     #     item.save()
+    if request.user.username == "planshet":
+        return redirect("tablet")
+
 
     return render(request, "index.html")
 
