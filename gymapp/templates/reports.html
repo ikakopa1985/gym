@@ -23,6 +23,11 @@
   .hidden{display:none}
   .filter-group{display:flex;flex-direction:column;gap:4px}
   .filter-label{font-size:12px;color:var(--text-muted,#888)}
+  .input,
+  .select,
+  .select option {
+      background:var(--panel2);color:var(--text)
+    }
 </style>
 {% endblock %}
 
@@ -211,6 +216,7 @@
             <tr>
               <th>კლიენტი</th>
               <th>აბონომენტი</th>
+              <th>ტრენერი</th>
               <th>დაწყების თარიღი</th>
               <th>დასრულების თარიღი</th>
               <th>დარჩ. ვიზიტი</th>
@@ -413,6 +419,7 @@ async function loadReport(){
       <tr>
         <td>${r.client_name || "—"}</td>
         <td>${r.membership_name || "—"}</td>
+        <td>${r.trainer_name || "უტრენერო"}</td>
         <td>${r.start_date || "—"}</td>
         <td>${r.end_date || "—"}</td>
         <td>${r.remaining_visits != null ? r.remaining_visits : "—"}</td>

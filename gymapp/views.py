@@ -732,20 +732,33 @@ class ReportsViewSet(viewsets.ViewSet):
                 Q(client__passId__icontains=q)
             )
 
-        rows = [
-            {
+        payments = {
+            p.client_membership_id: p
+            for p in Payment.objects.select_related("trainer").filter(
+                client_membership_id__in=qs.values_list("id", flat=True)
+            )
+        }
+
+        rows = []
+        for cm in qs.order_by("client__last_name", "client__first_name")[:3000]:
+            payment = payments.get(cm.id)
+
+            rows.append({
                 "id": cm.id,
                 "client_id": cm.client_id,
                 "client_name": str(cm.client),
                 "membership_id": cm.membership_id,
                 "membership_name": cm.membership.name if cm.membership else None,
+                "trainer_name": (
+                    str(payment.trainer)
+                    if payment and payment.trainer
+                    else "უტრენერო"
+                ),
                 "start_date": cm.start_date,
                 "end_date": cm.end_date,
                 "remaining_visits": cm.remaining_visits,
                 "status": cm.status,
-            }
-            for cm in qs.order_by("client__last_name", "client__first_name")[:3000]
-        ]
+            })
 
         return Response({
             "count": qs.values("client_id").distinct().count(),
