@@ -264,8 +264,26 @@
             <div class="sub">Reports API</div>
               <div class="stat" style="margin-top:12px">
                 <div class="k">დღიური შემოსავალი</div>
-                <div class="v" id="statTodayIncome">0₾</div>
-                <div class="s">Payment-ის ჯამი</div>
+
+                <div class="v" id="statTodayIncome">
+                  0.00₾
+                </div>
+
+                <div class="s">
+                  აბონემენტები:
+                  <span
+                    class="mono"
+                    id="statRegularTodayIncome">
+                    0.00₾
+                  </span>
+
+                  • ერთჯერადი ვიზიტები:
+                  <span
+                    class="mono"
+                    id="statOneTimeTodayIncome">
+                    0.00₾
+                  </span>
+                </div>
               </div>
 
             <div class="stat" style="margin-top:12px">
@@ -646,39 +664,45 @@ socket.onmessage = function(e){
     });
   }
 
-  async function applySearch(){
-    const q = ($("q").value || "").trim();
+async function applySearch(){
+  const q = ($("q").value || "").trim();
 
-    // თუ ცარიელია — არაფერი აჩვენოს
-    if(!q){
-      clientsCache = [];
-      renderClients([]);
-      return;
-    }
-
-    let url = `/api/clients/?search=${encodeURIComponent(q)}`;
-
-    const res = await fetch(url);
-    if(!res.ok){
-      toast("bad","შეცდომა","კლიენტები ვერ მოიძებნა");
-      return;
-    }
-
-    let data = await res.json();
-
-    // თუ pagination გაქვს DRF-ში
-    if (data.results) {
-      data = data.results;
-    }
-
-    if(onlyExpiredMode){
-      data = data.filter(c => !c.active_membership_id);
-    }
-
-    clientsCache = data;
-    renderClients(data);
+  if(!q){
+    clientsCache = [];
+    renderClients([]);
+    return;
   }
 
+  const url = `/api/clients/?search=${encodeURIComponent(q)}`;
+
+  const res = await fetch(url);
+
+  if(!res.ok){
+    toast("bad", "შეცდომა", "კლიენტები ვერ მოიძებნა");
+    return;
+  }
+
+  let data = await res.json();
+
+  if(data.results){
+    data = data.results;
+  }
+
+  if(onlyExpiredMode){
+    data = data.filter(
+      c => !c.active_membership_id
+    );
+  }
+
+  clientsCache = data;
+  renderClients(data);
+
+  // თუ მხოლოდ ერთი კლიენტი მოიძებნა,
+  // ავტომატურად გახსნას "ნახვა"
+  if(data.length === 1){
+    await openClientModal(Number(data[0].id));
+  }
+}
 
 async function sync(){
 
@@ -742,6 +766,16 @@ async function sync(){
 
     if ($("statTodayIncome")) {
       $("statTodayIncome").textContent = `${Number(s.today_income || 0).toFixed(2)}₾`;
+    }
+
+    if ($("statRegularTodayIncome")) {
+      $("statRegularTodayIncome").textContent =
+        `${Number(s.regular_today_income || 0).toFixed(2)}₾`;
+    }
+
+    if ($("statOneTimeTodayIncome")) {
+      $("statOneTimeTodayIncome").textContent =
+        `${Number(s.one_time_today_income || 0).toFixed(2)}₾`;
     }
 
     if ($("statMonthIncome")) {

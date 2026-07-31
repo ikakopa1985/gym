@@ -286,3 +286,63 @@ class ClientSync(models.Model):
 
     def __str__(self):
         return f"{self.client} • {self.action} • {self.status}"
+
+
+
+class OneTimePayment(models.Model):
+    PAYMENT_METHODS = (
+        ("cash", "ქეში"),
+        ("card", "ბარათი"),
+        ("transfer", "გადმორიცხვა"),
+    )
+
+    client = models.ForeignKey(
+        "Client",
+        on_delete=models.PROTECT,
+        related_name="one_time_payments",
+        verbose_name="კლიენტი",
+    )
+
+    amount = models.DecimalField(
+        "თანხა",
+        max_digits=8,
+        decimal_places=2,
+        default=20,
+    )
+
+    method = models.CharField(
+        "გადახდის მეთოდი",
+        max_length=20,
+        choices=PAYMENT_METHODS,
+        default="cash",
+    )
+
+    operation_date = models.DateTimeField(
+        "ოპერაციის თარიღი",
+        default=timezone.now,
+        db_index=True,
+    )
+
+    comment = models.TextField(
+        "კომენტარი",
+        blank=True,
+        default="",
+    )
+
+    created_at = models.DateTimeField(
+        "შექმნის დრო",
+        auto_now_add=True,
+    )
+
+    class Meta:
+        ordering = ["-operation_date", "-id"]
+        verbose_name = "ერთჯერადი გადახდა"
+        verbose_name_plural = "ერთჯერადი გადახდები"
+
+        indexes = [
+            models.Index(fields=["operation_date"]),
+            models.Index(fields=["client", "operation_date"]),
+        ]
+
+    def __str__(self):
+        return f"{self.client} - {self.amount}₾"

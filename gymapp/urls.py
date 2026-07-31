@@ -12,6 +12,11 @@ router.register(r"payments", PaymentViewSet, basename="payment")
 router.register(r"checkins", CheckInViewSet, basename="checkin")
 router.register(r"reports", ReportsViewSet, basename="reports")
 router.register(r"card-payments", CardPaymentViewSet, basename="card-payment")
+router.register(
+    r"one-time-payments",
+    OneTimePaymentViewSet,
+    basename="one-time-payment",
+)
 
 
 urlpatterns = [
@@ -30,7 +35,11 @@ urlpatterns = [
 
     path("login/", login_view, name="login"),
     path("logout/", logout_view, name="logout"),
-
+    path(
+        "one-time-payments/",
+        one_time_payments_page,
+        name="one_time_payments",
+    ),
 
 
     path("zk/start/", zk_start),

@@ -1,89 +1,736 @@
+```html
 {% extends "base.html" %}
+
+{% block title %}Check-in ისტორია • Gym Manager{% endblock %}
 {% block nav_checkins_active %}active{% endblock %}
 
 {% block extra_css %}
 <style>
-  .grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px;}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-  .box{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--field-bg)}
-  .input{width:100%;padding:10px 12px;border-radius:14px;border:1px solid var(--line2);background:var(--field-bg);color:var(--text);outline:0;}
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+    .card .body{padding:14px 16px;height: 300px;}
+  .row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--line2);
+    background: var(--field-bg);
+    color: var(--text);
+    outline: 0;
+  }
+
+  .combo {
+    position: relative;
+    flex: 1;
+    min-width: 280px;
+  }
+
+  .comboList {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 7px);
+    display: none;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 100;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #0a2328;
+    box-shadow: var(--shadow);
+  }
+
+  .comboList.show {
+    display: block;
+  }
+
+  .comboItem {
+    padding: 11px 13px;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+
+  .comboItem:hover {
+    background: rgba(38,153,165,.15);
+  }
+
+  .comboItem:last-child {
+    border-bottom: 0;
+  }
+
+  .clientName {
+    font-weight: 900;
+  }
+
+  .clientMeta {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .selectedClient {
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(255,255,255,.03);
+  }
+
+  .selectedClientName {
+    font-size: 20px;
+    font-weight: 900;
+  }
+
+  .tableWrap {
+    margin-top: 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: auto;
+    max-height: 560px;
+    background: var(--field-bg);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    padding: 12px;
+    text-align: left;
+    font-weight: 900;
+    background: #0f2a30;
+    border-bottom: 1px solid var(--line);
+  }
+
+  tbody td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+
+  tbody tr:hover {
+    background: rgba(38,153,165,.08);
+  }
+
+  .statBox {
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255,255,255,.03);
+  }
+
+  .statValue {
+    margin-top: 4px;
+    font-size: 22px;
+    font-weight: 900;
+  }
+
+  .emptyMessage {
+    padding: 30px;
+    text-align: center;
+    color: var(--muted);
+  }
+
+  @media (max-width: 720px) {
+    .combo {
+      min-width: 100%;
+    }
+
+    #dateFrom,
+    #dateTo {
+      max-width: 100% !important;
+    }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="grid">
+
   <div class="card">
     <div class="head">
       <div>
-        <h2>სწრაფი Check-in</h2>
-        <div class="sub">ბარათის ნომრით ან ტელეფონით</div>
+        <h2>კლიენტის Check-in ისტორია</h2>
+        <div class="sub">
+          აირჩიე კლიენტი და ნახე როდის შემოვიდა
+        </div>
       </div>
     </div>
+
     <div class="body">
+
       <div class="row">
-        <input class="input" id="card" placeholder="ბარათის ნომერი (მაგ: 487916351)" style="max-width:320px">
-        <span class="muted">ან</span>
-        <input class="input" id="phone" placeholder="ტელეფონი (555...)" style="max-width:260px">
-        <button class="btn primary" id="btnGo">✅ Check-in</button>
+        <div class="combo">
+          <input
+            class="input"
+            id="clientSearch"
+            autocomplete="off"
+            placeholder="სახელი, გვარი, ტელეფონი, პირადი ნომერი ან ბარათი...">
+
+          <div
+            class="comboList"
+            id="clientList">
+          </div>
+        </div>
+
+        <button
+          class="btn"
+          id="btnClearClient"
+          type="button">
+          გასუფთავება
+        </button>
       </div>
 
-      <div class="hint">თუ აბონემენტი ვადაგასულია — არ შეუშვებს. limited-ზე ვიზიტს ავტომატურად აკლებს.</div>
+      <input
+        type="hidden"
+        id="selectedClientId">
 
-      <div class="box" id="result" style="margin-top:14px;display:none"></div>
+      <div
+        class="selectedClient"
+        id="selectedClientBox"
+        style="display:none;margin-top:14px;">
+
+        <div
+          class="selectedClientName"
+          id="selectedClientName">
+        </div>
+
+        <div
+          class="clientMeta"
+          id="selectedClientMeta">
+        </div>
+      </div>
+
     </div>
   </div>
+
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>შემოსვლების ისტორია</h2>
+        <div class="sub">
+          უახლესი შემოსვლა ნაჩვენებია პირველი
+        </div>
+      </div>
+    </div>
+
+    <div class="body">
+
+      <div class="row">
+        <input
+          class="input"
+          id="dateFrom"
+          type="date"
+          style="max-width:200px">
+
+        <input
+          class="input"
+          id="dateTo"
+          type="date"
+          style="max-width:200px">
+
+        <button
+          class="btn primary"
+          id="btnFilter"
+          type="button">
+          🔎 ნახვა
+        </button>
+
+        <button
+          class="btn"
+          id="btnResetDates"
+          type="button">
+          თარიღების გასუფთავება
+        </button>
+      </div>
+
+      <div
+        class="row"
+        style="margin-top:14px;">
+
+        <div class="statBox">
+          <div class="clientMeta">
+            სულ შემოსვლა
+          </div>
+
+          <div
+            class="statValue"
+            id="totalCheckins">
+            0
+          </div>
+        </div>
+
+        <div class="statBox">
+          <div class="clientMeta">
+            ბოლო შემოსვლა
+          </div>
+
+          <div
+            class="statValue"
+            id="lastCheckin"
+            style="font-size:16px;">
+            —
+          </div>
+        </div>
+      </div>
+
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:80px">№</th>
+              <th>კლიენტი</th>
+              <th>შემოსვლის თარიღი</th>
+              <th>შემოსვლის დრო</th>
+            </tr>
+          </thead>
+
+          <tbody id="checkinsBody">
+            <tr>
+              <td colspan="4">
+                <div class="emptyMessage">
+                  ჯერ აირჩიე კლიენტი
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  const $ = (id)=>document.getElementById(id);
+  const $ = id => document.getElementById(id);
 
-  $("btnGo").addEventListener("click", async ()=>{
-    const card_number = $("card").value.trim();
-    const phone = $("phone").value.trim();
+  let clientsCache = [];
+  let selectedClient = null;
+  let searchTimer = null;
 
-    const payload = {};
-    if(card_number) payload.card_number = card_number;
-    if(!card_number && phone) payload.phone = phone;
+  const clientSearch = $("clientSearch");
+  const clientList = $("clientList");
 
-    if(!payload.card_number && !payload.phone){
-      toast("bad","შეცდომა","მიუთითე card_number ან phone"); return;
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function clientFullName(client) {
+    return (
+      `${client.first_name || ""} ` +
+      `${client.last_name || ""}`
+    ).trim();
+  }
+
+  function showClientList() {
+    clientList.classList.add("show");
+  }
+
+  function hideClientList() {
+    clientList.classList.remove("show");
+  }
+
+  function formatDateTime(value) {
+    if (!value) {
+      return {
+        date: "—",
+        time: "—",
+        full: "—"
+      };
     }
 
-    const res = await fetch("/api/checkins/quick/", {
-      method:"POST",
-      headers: {"Content-Type":"application/json","X-CSRFToken": csrftoken},
-      body: JSON.stringify(payload)
-    });
+    const date = new Date(value);
 
-    const box = $("result");
-    let data = {};
-    try{ data = await res.json(); }catch(e){}
+    if (Number.isNaN(date.getTime())) {
+      return {
+        date: String(value),
+        time: "—",
+        full: String(value)
+      };
+    }
 
-    if(!res.ok){
-      toast("bad","ვერ მოხერხდა", data.detail || "შეცდომა");
-      box.style.display = "block";
-      box.innerHTML = `<div class="pill bad">⛔ ${data.detail || "შეცდომა"}</div>`;
+    return {
+      date: date.toLocaleDateString("ka-GE"),
+      time: date.toLocaleTimeString("ka-GE", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      }),
+      full: date.toLocaleString("ka-GE")
+    };
+  }
+
+  function renderClientList() {
+    if (!clientsCache.length) {
+      clientList.innerHTML = `
+        <div class="comboItem">
+          <div class="clientMeta">
+            კლიენტი ვერ მოიძებნა
+          </div>
+        </div>
+      `;
       return;
     }
 
-    toast("ok","OK","Check-in დაფიქსირდა ✅");
-    box.style.display = "block";
+    clientList.innerHTML = clientsCache.map(client => `
+      <div
+        class="comboItem"
+        data-client-id="${client.id}">
 
-    const c = data.client;
-    const cm = data.client_membership;
-    box.innerHTML = `
-      <div class="pill ok">✅ შესვლა მიღებულია</div>
-      <div style="margin-top:10px;font-weight:900">${c.first_name} ${c.last_name}</div>
-      <div class="muted" style="margin-top:4px;">${c.phone || ""} • ბარათი: ${c.card_number || "—"}</div>
-      <div style="margin-top:10px;">
-        <div><b>აბონემენტი:</b> ${cm.membership_name}</div>
-        <div><b>ტიპი:</b> ${cm.membership_type}</div>
-        <div><b>ვადა:</b> ${cm.start_date} → ${cm.end_date || "—"}</div>
-        <div><b>დარჩენილი ვიზიტები:</b> ${cm.remaining_visits ?? "—"}</div>
+        <div class="clientName">
+          ${escapeHtml(clientFullName(client))}
+        </div>
+
+        <div class="clientMeta">
+          ${escapeHtml(client.phone || "—")}
+          ${client.passId
+            ? " • " + escapeHtml(client.passId)
+            : ""}
+          ${client.card_number
+            ? " • ბარათი: " + escapeHtml(client.card_number)
+            : ""}
+        </div>
       </div>
+    `).join("");
+
+    clientList
+      .querySelectorAll("[data-client-id]")
+      .forEach(item => {
+        item.addEventListener("click", async () => {
+          const clientId = Number(
+            item.dataset.clientId
+          );
+
+          const client = clientsCache.find(
+            row => Number(row.id) === clientId
+          );
+
+          if (client) {
+            await selectClient(client);
+          }
+        });
+      });
+  }
+
+  async function searchClients(search) {
+    const query = search.trim();
+
+    if (!query) {
+      clientsCache = [];
+      hideClientList();
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/clients/?search=${encodeURIComponent(query)}`
+      );
+
+      if (!response.ok) {
+        toast(
+          "bad",
+          "შეცდომა",
+          "კლიენტები ვერ ჩაიტვირთა"
+        );
+        return;
+      }
+
+      let data = await response.json();
+
+      if (data.results) {
+        data = data.results;
+      }
+
+      clientsCache = Array.isArray(data)
+        ? data
+        : [];
+
+      renderClientList();
+      showClientList();
+
+      // თუ ზუსტად ერთი შედეგია, ავტომატურად აირჩიოს
+      if (clientsCache.length === 1) {
+        await selectClient(clientsCache[0]);
+      }
+
+    } catch (error) {
+      console.error(error);
+
+      toast(
+        "bad",
+        "კავშირის შეცდომა",
+        "სერვერთან დაკავშირება ვერ მოხერხდა"
+      );
+    }
+  }
+
+  async function selectClient(client) {
+    selectedClient = client;
+
+    $("selectedClientId").value =
+      String(client.id);
+
+    clientSearch.value =
+      clientFullName(client);
+
+    $("selectedClientName").textContent =
+      clientFullName(client);
+
+    $("selectedClientMeta").textContent = [
+      client.phone || null,
+      client.passId || null,
+      client.card_number
+        ? `ბარათი: ${client.card_number}`
+        : null
+    ].filter(Boolean).join(" • ");
+
+    $("selectedClientBox").style.display =
+      "block";
+
+    hideClientList();
+
+    await loadCheckins();
+  }
+
+  async function loadCheckins() {
+    const clientId =
+      $("selectedClientId").value;
+
+    if (!clientId) {
+      toast(
+        "bad",
+        "კლიენტი არ არის არჩეული",
+        "ჯერ აირჩიე კლიენტი"
+      );
+      return;
+    }
+
+    const params = new URLSearchParams();
+
+    params.set("client", clientId);
+
+    if ($("dateFrom").value) {
+      params.set(
+        "date_from",
+        $("dateFrom").value
+      );
+    }
+
+    if ($("dateTo").value) {
+      params.set(
+        "date_to",
+        $("dateTo").value
+      );
+    }
+
+    try {
+      const response = await fetch(
+        `/api/checkins/?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        toast(
+          "bad",
+          "შეცდომა",
+          "Check-in ისტორია ვერ ჩაიტვირთა"
+        );
+        return;
+      }
+
+      let data = await response.json();
+
+      if (data.results) {
+        data = data.results;
+      }
+
+      const rows = Array.isArray(data)
+        ? data
+        : [];
+
+      renderCheckins(rows);
+
+    } catch (error) {
+      console.error(error);
+
+      toast(
+        "bad",
+        "კავშირის შეცდომა",
+        "სერვერთან დაკავშირება ვერ მოხერხდა"
+      );
+    }
+  }
+
+  function renderCheckins(rows) {
+    const tbody = $("checkinsBody");
+
+    $("totalCheckins").textContent =
+      rows.length;
+
+    if (rows.length) {
+      $("lastCheckin").textContent =
+        formatDateTime(rows[0].created_at).full;
+    } else {
+      $("lastCheckin").textContent = "—";
+    }
+
+    if (!rows.length) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4">
+            <div class="emptyMessage">
+              ამ კლიენტს Check-in ჩანაწერი არ აქვს
+            </div>
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = rows.map(
+      (checkin, index) => {
+        const dt = formatDateTime(
+          checkin.created_at
+        );
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+
+            <td>
+              ${escapeHtml(
+                checkin.client_name ||
+                clientFullName(selectedClient || {})
+              )}
+            </td>
+
+            <td>${escapeHtml(dt.date)}</td>
+            <td style="font-weight:900">
+              ${escapeHtml(dt.time)}
+            </td>
+          </tr>
+        `;
+      }
+    ).join("");
+  }
+
+  function clearSelectedClient() {
+    selectedClient = null;
+    clientsCache = [];
+
+    $("selectedClientId").value = "";
+    $("selectedClientBox").style.display =
+      "none";
+
+    clientSearch.value = "";
+
+    $("totalCheckins").textContent = "0";
+    $("lastCheckin").textContent = "—";
+
+    $("checkinsBody").innerHTML = `
+      <tr>
+        <td colspan="4">
+          <div class="emptyMessage">
+            ჯერ აირჩიე კლიენტი
+          </div>
+        </td>
+      </tr>
     `;
-  });
+
+    hideClientList();
+    clientSearch.focus();
+  }
+
+  clientSearch.addEventListener(
+    "input",
+    () => {
+      clearTimeout(searchTimer);
+
+      $("selectedClientId").value = "";
+      selectedClient = null;
+
+      searchTimer = setTimeout(() => {
+        searchClients(clientSearch.value);
+      }, 300);
+    }
+  );
+
+  clientSearch.addEventListener(
+    "keydown",
+    event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+
+        clearTimeout(searchTimer);
+        searchClients(clientSearch.value);
+      }
+    }
+  );
+
+  document.addEventListener(
+    "click",
+    event => {
+      const combo =
+        clientSearch.closest(".combo");
+
+      if (
+        combo &&
+        !combo.contains(event.target)
+      ) {
+        hideClientList();
+      }
+    }
+  );
+
+  $("btnFilter").addEventListener(
+    "click",
+    loadCheckins
+  );
+
+  $("btnClearClient").addEventListener(
+    "click",
+    clearSelectedClient
+  );
+
+  $("btnResetDates").addEventListener(
+    "click",
+    async () => {
+      $("dateFrom").value = "";
+      $("dateTo").value = "";
+
+      if ($("selectedClientId").value) {
+        await loadCheckins();
+      }
+    }
+  );
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      clientSearch.focus();
+    }
+  );
 </script>
 {% endblock %}
+```

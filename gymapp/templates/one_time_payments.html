@@ -1,0 +1,1030 @@
+{% extends "base.html" %}
+
+{% block title %}
+ერთჯერადი გადახდები • Gym Manager
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-top: 16px;
+  }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px 14px;
+    font-size: 13px;
+  }
+
+  .kv label {
+    color: var(--muted);
+    font-weight: 900;
+  }
+
+  .input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--line2);
+    background: var(--field-bg);
+    color: var(--text);
+    outline: 0;
+  }
+
+  .row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .tableWrap {
+    margin-top: 12px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--field-bg);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  thead th {
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    font-weight: 900;
+    position: sticky;
+    top: 0;
+    background: rgba(255, 255, 255, .03);
+  }
+
+  tbody td {
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+  }
+
+  tbody tr:hover {
+    background: rgba(38, 153, 165, .08);
+  }
+
+  .tdActions {
+    white-space: nowrap;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .combo {
+    position: relative;
+    width: 100%;
+  }
+
+  .comboInput {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--line2);
+    background: var(--field-bg);
+    color: var(--text);
+    outline: 0;
+  }
+
+  .comboList {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% + 8px);
+    border: 1px solid var(--line);
+    background: rgba(10, 35, 40, .98);
+    border-radius: 14px;
+    max-height: 260px;
+    overflow: auto;
+    display: none;
+    z-index: 30;
+    box-shadow: var(--shadow);
+  }
+
+  .comboList.show {
+    display: block;
+  }
+
+  .comboItem {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .comboItem:hover {
+    background: rgba(38, 153, 165, .12);
+  }
+
+  .comboItem:last-child {
+    border-bottom: 0;
+  }
+
+  .miniTag {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .modeBadge {
+    display: inline-flex;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, .04);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .statBox {
+    padding: 12px 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .03);
+  }
+
+  .statBox strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 20px;
+  }
+
+  .hidden {
+    display: none !important;
+  }
+
+  @media (max-width: 900px) {
+    .kv {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grid">
+
+  <div class="card">
+    <div class="head">
+      <div>
+        <div class="row">
+          <h2 id="formTitle" style="margin:0">
+            ერთჯერადი გადახდა
+          </h2>
+
+          <span class="modeBadge" id="formModeBadge">
+            ახალი ჩანაწერი
+          </span>
+        </div>
+
+        <div class="sub">
+          აირჩიე კლიენტი, თარიღი და თანხა
+        </div>
+      </div>
+
+      <div class="row">
+        <button
+          class="btn hidden"
+          id="btnCancelEdit"
+          type="button">
+          ↩ გაუქმება
+        </button>
+
+        <button
+          class="btn"
+          id="btnReload"
+          type="button">
+          🔄 განახლება
+        </button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="kv">
+
+        <label>კლიენტი *</label>
+
+        <div class="combo">
+          <input
+            class="comboInput"
+            id="otp_client_search"
+            placeholder="სახელი / გვარი / ტელეფონი / პირადი ნომერი / ბარათი">
+
+          <div
+            class="comboList"
+            id="otp_client_list">
+          </div>
+        </div>
+
+        <label>არჩეული კლიენტი</label>
+
+        <div>
+          <input
+            class="input"
+            id="otp_client_label"
+            disabled
+            value="—">
+
+          <input
+            type="hidden"
+            id="otp_client_id">
+        </div>
+
+        <label>ოპერაციის თარიღი *</label>
+
+        <input
+          class="input"
+          id="otp_operation_date"
+          type="datetime-local">
+
+        <label>თანხა *</label>
+
+        <input
+          class="input"
+          id="otp_amount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          value="20.00">
+
+        <label>გადახდის მეთოდი *</label>
+
+        <select
+          class="input"
+          id="otp_method">
+
+          <option value="cash">ქეში</option>
+          <option value="card">ბარათი</option>
+          <option value="transfer">გადმორიცხვა</option>
+        </select>
+
+        <label>კომენტარი</label>
+
+        <textarea
+          class="input"
+          id="otp_comment"
+          rows="3"
+          placeholder="ერთჯერადი ვიზიტი, მომსახურება ან სხვა შენიშვნა"></textarea>
+
+      </div>
+
+      <div
+        class="row"
+        style="margin-top:14px;">
+
+        <button
+          class="btn primary"
+          id="btnSave"
+          type="button">
+          💾 შენახვა
+        </button>
+
+        <button
+          class="btn hidden"
+          id="btnCancelBottom"
+          type="button">
+          გაუქმება
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <div>
+        <h2>ერთჯერადი გადახდების ისტორია</h2>
+
+        <div class="sub">
+          ნაგულისხმევად ჩანს დღევანდელი ჩანაწერები
+        </div>
+      </div>
+    </div>
+
+    <div class="body">
+
+      <div class="row">
+        <input
+          class="input"
+          id="filter_date_from"
+          type="date"
+          style="max-width:190px">
+
+        <input
+          class="input"
+          id="filter_date_to"
+          type="date"
+          style="max-width:190px">
+
+        <input
+          class="input"
+          id="filter_search"
+          placeholder="კლიენტის ძებნა..."
+          style="flex:1;min-width:220px">
+
+        <button
+          class="btn primary"
+          id="btnSearch"
+          type="button">
+          ძებნა
+        </button>
+
+        <button
+          class="btn"
+          id="btnReset"
+          type="button">
+          გასუფთავება
+        </button>
+      </div>
+
+      <div
+        class="row"
+        style="margin-top:12px;">
+
+        <div class="statBox">
+          <span class="miniTag">ჩანაწერები</span>
+          <strong id="statCount">0</strong>
+        </div>
+
+        <div class="statBox">
+          <span class="miniTag">ჯამური თანხა</span>
+          <strong id="statTotal">0.00₾</strong>
+        </div>
+      </div>
+
+      <div
+        class="tableWrap"
+        style="max-height:520px;overflow:auto;">
+
+        <table>
+          <thead>
+            <tr>
+              <th>ოპერაციის თარიღი</th>
+              <th>კლიენტი</th>
+              <th>თანხა</th>
+              <th>მეთოდი</th>
+              <th>კომენტარი</th>
+              <th>შექმნის დრო</th>
+              <th style="width:180px">ქმედება</th>
+            </tr>
+          </thead>
+
+          <tbody id="otp_tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const $ = id => document.getElementById(id);
+
+  let clientsCache = [];
+  let paymentsCache = [];
+  let editingId = null;
+  let clientSearchTimer = null;
+
+  function pad2(value) {
+    return String(value).padStart(2, "0");
+  }
+
+  function todayStr() {
+    const date = new Date();
+
+    return [
+      date.getFullYear(),
+      pad2(date.getMonth() + 1),
+      pad2(date.getDate())
+    ].join("-");
+  }
+
+  function toLocalInputValue(date) {
+    return (
+      `${date.getFullYear()}-` +
+      `${pad2(date.getMonth() + 1)}-` +
+      `${pad2(date.getDate())}T` +
+      `${pad2(date.getHours())}:` +
+      `${pad2(date.getMinutes())}`
+    );
+  }
+
+  function isoToLocalInputValue(value) {
+    if (!value) return "";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return toLocalInputValue(date);
+  }
+
+  function localInputToISO(value) {
+    if (!value) return null;
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return date.toISOString();
+  }
+
+  function fmtMoney(value) {
+    const number = Number(value || 0);
+
+    return Number.isFinite(number)
+      ? number.toFixed(2)
+      : "0.00";
+  }
+
+  function fmtDateTime(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+
+    return date.toLocaleString("ka-GE");
+  }
+
+  function methodLabel(method) {
+    const labels = {
+      cash: "ქეში",
+      card: "ბარათი",
+      transfer: "გადმორიცხვა"
+    };
+
+    return labels[method] || method || "—";
+  }
+
+  function parseAmount(value) {
+    const normalized = String(value || "")
+      .replace(",", ".")
+      .trim();
+
+    const number = Number(normalized);
+
+    return Number.isFinite(number)
+      ? number
+      : null;
+  }
+
+  function clientText(client) {
+    const fullName = (
+      `${client.first_name || ""} ` +
+      `${client.last_name || ""}`
+    ).trim();
+
+    const parts = [fullName];
+
+    if (client.passId) {
+      parts.push(client.passId);
+    }
+
+    if (client.phone) {
+      parts.push(client.phone);
+    }
+
+    if (client.card_number) {
+      parts.push(client.card_number);
+    }
+
+    return parts.join(" • ");
+  }
+
+  function setSelectedClient(client) {
+    $("otp_client_id").value = client
+      ? String(client.id)
+      : "";
+
+    $("otp_client_label").value = client
+      ? clientText(client)
+      : "—";
+
+    $("otp_client_search").value = client
+      ? clientText(client)
+      : "";
+
+    hideClientList();
+  }
+
+  function showClientList() {
+    $("otp_client_list").classList.add("show");
+  }
+
+  function hideClientList() {
+    $("otp_client_list").classList.remove("show");
+  }
+
+  function renderClientList() {
+    const list = $("otp_client_list");
+
+    if (!clientsCache.length) {
+      list.innerHTML = `
+        <div class="comboItem">
+          <span class="miniTag">კლიენტი ვერ მოიძებნა</span>
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = clientsCache.map(client => `
+      <div
+        class="comboItem"
+        data-client-id="${client.id}">
+
+        <div>
+          <div style="font-weight:900">
+            ${client.first_name || ""}
+            ${client.last_name || ""}
+          </div>
+
+          <div class="miniTag">
+            ${client.passId || "—"}
+            ${client.phone ? " • " + client.phone : ""}
+            ${client.card_number ? " • " + client.card_number : ""}
+          </div>
+        </div>
+
+        <div class="miniTag">
+          ID: ${client.id}
+        </div>
+      </div>
+    `).join("");
+
+    list
+      .querySelectorAll("[data-client-id]")
+      .forEach(item => {
+        item.addEventListener("click", () => {
+          const id = Number(item.dataset.clientId);
+
+          const client = clientsCache.find(
+            row => Number(row.id) === id
+          );
+
+          if (client) {
+            setSelectedClient(client);
+          }
+        });
+      });
+  }
+
+  async function loadClients(search = "") {
+    const query = search.trim();
+
+    if (!query) {
+      clientsCache = [];
+      renderClientList();
+      return;
+    }
+
+    const response = await fetch(
+      `/api/clients/?search=${encodeURIComponent(query)}`
+    );
+
+    if (!response.ok) {
+      toast(
+        "bad",
+        "შეცდომა",
+        "კლიენტები ვერ ჩაიტვირთა"
+      );
+      return;
+    }
+
+    let data = await response.json();
+
+    if (data.results) {
+      data = data.results;
+    }
+
+    clientsCache = Array.isArray(data)
+      ? data
+      : [];
+
+    renderClientList();
+  }
+
+  $("otp_client_search").addEventListener("input", () => {
+    clearTimeout(clientSearchTimer);
+
+    clientSearchTimer = setTimeout(async () => {
+      const search = $("otp_client_search").value.trim();
+
+      $("otp_client_id").value = "";
+      $("otp_client_label").value = "—";
+
+      if (!search) {
+        hideClientList();
+        return;
+      }
+
+      await loadClients(search);
+      showClientList();
+    }, 300);
+  });
+
+  document.addEventListener("click", event => {
+    const combo = $("otp_client_search").closest(".combo");
+
+    if (combo && !combo.contains(event.target)) {
+      hideClientList();
+    }
+  });
+
+  function setCreateMode() {
+    editingId = null;
+
+    $("formTitle").textContent = "ერთჯერადი გადახდა";
+    $("formModeBadge").textContent = "ახალი ჩანაწერი";
+    $("btnSave").textContent = "💾 შენახვა";
+
+    $("btnCancelEdit").classList.add("hidden");
+    $("btnCancelBottom").classList.add("hidden");
+
+    $("otp_client_id").value = "";
+    $("otp_client_label").value = "—";
+    $("otp_client_search").value = "";
+
+    $("otp_amount").value = "20.00";
+    $("otp_method").value = "cash";
+    $("otp_comment").value = "";
+    $("otp_operation_date").value =
+      toLocalInputValue(new Date());
+  }
+
+  function setEditMode(payment) {
+    editingId = Number(payment.id);
+
+    $("formTitle").textContent =
+      `ერთჯერადი გადახდის რედაქტირება #${payment.id}`;
+
+    $("formModeBadge").textContent = "რედაქტირება";
+    $("btnSave").textContent = "💾 განახლება";
+
+    $("btnCancelEdit").classList.remove("hidden");
+    $("btnCancelBottom").classList.remove("hidden");
+
+    setSelectedClient({
+      id: payment.client,
+      first_name: payment.client_first_name || "",
+      last_name: payment.client_last_name || "",
+      phone: payment.client_phone || "",
+      passId: payment.client_passId || "",
+      card_number: payment.client_card_number || ""
+    });
+
+    $("otp_amount").value = fmtMoney(payment.amount);
+    $("otp_method").value = payment.method || "cash";
+    $("otp_comment").value = payment.comment || "";
+
+    $("otp_operation_date").value =
+      isoToLocalInputValue(payment.operation_date);
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+  }
+
+  function renderPayments(rows) {
+    paymentsCache = Array.isArray(rows)
+      ? rows.slice()
+      : [];
+
+    const tbody = $("otp_tbody");
+
+    tbody.innerHTML = paymentsCache.map(payment => `
+      <tr>
+        <td>${fmtDateTime(payment.operation_date)}</td>
+        <td>${payment.client_name || "—"}</td>
+
+        <td style="font-weight:900">
+          ${fmtMoney(payment.amount)}₾
+        </td>
+
+        <td>${methodLabel(payment.method)}</td>
+        <td>${payment.comment || "—"}</td>
+        <td>${fmtDateTime(payment.created_at)}</td>
+
+        <td>
+          <div class="tdActions">
+            <button
+              class="btn"
+              data-edit="${payment.id}"
+              type="button">
+              ✏️ რედაქტირება
+            </button>
+
+            <button
+              class="btn danger"
+              data-delete="${payment.id}"
+              type="button">
+              🗑️ წაშლა
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+
+    tbody
+      .querySelectorAll("[data-edit]")
+      .forEach(button => {
+        button.addEventListener("click", () => {
+          const payment = paymentsCache.find(
+            row =>
+              Number(row.id) ===
+              Number(button.dataset.edit)
+          );
+
+          if (payment) {
+            setEditMode(payment);
+          }
+        });
+      });
+
+    tbody
+      .querySelectorAll("[data-delete]")
+      .forEach(button => {
+        button.addEventListener("click", () => {
+          deletePayment(
+            Number(button.dataset.delete)
+          );
+        });
+      });
+  }
+
+  function buildListUrl() {
+    const params = new URLSearchParams();
+
+    const dateFrom = $("filter_date_from").value;
+    const dateTo = $("filter_date_to").value;
+    const search = $("filter_search").value.trim();
+
+    if (dateFrom) {
+      params.set("date_from", dateFrom);
+    }
+
+    if (dateTo) {
+      params.set("date_to", dateTo);
+    }
+
+    if (search) {
+      params.set("search", search);
+    }
+
+    return `/api/one-time-payments/?${params.toString()}`;
+  }
+
+  async function loadPayments() {
+    const response = await fetch(buildListUrl());
+
+    if (!response.ok) {
+      toast(
+        "bad",
+        "შეცდომა",
+        "ერთჯერადი გადახდები ვერ ჩაიტვირთა"
+      );
+      return;
+    }
+
+    let data = await response.json();
+
+    if (data.results) {
+      data = data.results;
+    }
+
+    renderPayments(
+      Array.isArray(data) ? data : []
+    );
+
+    updateStats(
+      Array.isArray(data) ? data : []
+    );
+  }
+
+  function updateStats(rows) {
+    const total = rows.reduce(
+      (sum, row) =>
+        sum + Number(row.amount || 0),
+      0
+    );
+
+    $("statCount").textContent = rows.length;
+    $("statTotal").textContent =
+      `${fmtMoney(total)}₾`;
+  }
+
+  $("btnSave").addEventListener("click", async () => {
+    const clientId = $("otp_client_id").value;
+    const amount = parseAmount(
+      $("otp_amount").value
+    );
+
+    const operationDate = localInputToISO(
+      $("otp_operation_date").value
+    );
+
+    if (!clientId) {
+      toast(
+        "bad",
+        "შეცდომა",
+        "აირჩიე კლიენტი"
+      );
+      return;
+    }
+
+    if (amount === null || amount <= 0) {
+      toast(
+        "bad",
+        "შეცდომა",
+        "თანხა უნდა იყოს 0-ზე მეტი"
+      );
+      return;
+    }
+
+    if (!operationDate) {
+      toast(
+        "bad",
+        "შეცდომა",
+        "აირჩიე ოპერაციის თარიღი"
+      );
+      return;
+    }
+
+    const payload = {
+      client: Number(clientId),
+      amount: amount,
+      method: $("otp_method").value,
+      operation_date: operationDate,
+      comment: $("otp_comment").value.trim()
+    };
+
+    const isEdit = editingId !== null;
+
+    const url = isEdit
+      ? `/api/one-time-payments/${editingId}/`
+      : "/api/one-time-payments/";
+
+    const method = isEdit
+      ? "PATCH"
+      : "POST";
+
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrftoken
+      },
+      body: JSON.stringify(payload)
+    });
+
+    let data = {};
+
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = {};
+    }
+
+    if (!response.ok) {
+      toast(
+        "bad",
+        "ვერ შეინახა",
+        data.detail || JSON.stringify(data)
+      );
+      return;
+    }
+
+    toast(
+      "ok",
+      "შენახულია",
+      `${fmtMoney(data.amount)}₾`
+    );
+
+    setCreateMode();
+    await loadPayments();
+  });
+
+  async function deletePayment(id) {
+    const payment = paymentsCache.find(
+      row => Number(row.id) === Number(id)
+    );
+
+    const label = payment
+      ? `${payment.client_name} • ${fmtMoney(payment.amount)}₾`
+      : `#${id}`;
+
+    if (!confirm(
+      `დარწმუნებული ხარ, რომ წაშალო?\n${label}`
+    )) {
+      return;
+    }
+
+    const response = await fetch(
+      `/api/one-time-payments/${id}/`,
+      {
+        method: "DELETE",
+        headers: {
+          "X-CSRFToken": csrftoken
+        }
+      }
+    );
+
+    if (!response.ok) {
+      toast(
+        "bad",
+        "შეცდომა",
+        "ჩანაწერი ვერ წაიშალა"
+      );
+      return;
+    }
+
+    if (editingId === id) {
+      setCreateMode();
+    }
+
+    toast(
+      "ok",
+      "წაიშალა",
+      "ჩანაწერი წაიშალა"
+    );
+
+    await loadPayments();
+  }
+
+  $("btnSearch").addEventListener(
+    "click",
+    loadPayments
+  );
+
+  $("btnReload").addEventListener(
+    "click",
+    loadPayments
+  );
+
+  $("btnReset").addEventListener(
+    "click",
+    async () => {
+      const today = todayStr();
+
+      $("filter_date_from").value = today;
+      $("filter_date_to").value = today;
+      $("filter_search").value = "";
+
+      await loadPayments();
+    }
+  );
+
+  $("filter_search").addEventListener(
+    "keydown",
+    async event => {
+      if (event.key === "Enter") {
+        await loadPayments();
+      }
+    }
+  );
+
+  $("btnCancelEdit").addEventListener(
+    "click",
+    setCreateMode
+  );
+
+  $("btnCancelBottom").addEventListener(
+    "click",
+    setCreateMode
+  );
+
+  document.addEventListener(
+    "DOMContentLoaded",
+    async () => {
+      const today = todayStr();
+
+      $("filter_date_from").value = today;
+      $("filter_date_to").value = today;
+
+      setCreateMode();
+      await loadPayments();
+    }
+  );
+</script>
+{% endblock %}

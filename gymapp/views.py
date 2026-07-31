@@ -400,6 +400,9 @@ class ReportsViewSet(viewsets.ViewSet):
 
         payments_today = Payment.objects.filter(operation_date__date=today)
         payments_month = Payment.objects.filter(operation_date__date__gte=month_start)
+        one_time_payments_today = OneTimePayment.objects.filter(
+            operation_date__date=today
+        )
 
         memberships_sold_today_qs = payments_today.filter(membership__isnull=False)
         memberships_sold_today_count = memberships_sold_today_qs.count()
@@ -413,9 +416,18 @@ class ReportsViewSet(viewsets.ViewSet):
             s=Coalesce(Sum("amount"), Decimal("0.00"))
         )["s"]
 
-        today_income = payments_today.aggregate(
+        regular_today_income = payments_today.aggregate(
             s=Coalesce(Sum("amount"), Decimal("0.00"))
         )["s"]
+
+        one_time_today_income = one_time_payments_today.aggregate(
+            s=Coalesce(Sum("amount"), Decimal("0.00"))
+        )["s"]
+
+        today_income = (
+                regular_today_income
+                + one_time_today_income
+        )
 
         month_income = payments_month.aggregate(
             s=Coalesce(Sum("amount"), Decimal("0.00"))
@@ -426,17 +438,38 @@ class ReportsViewSet(viewsets.ViewSet):
                 s=Coalesce(Sum("amount"), Decimal("0.00"))
             )["s"]
 
+        def one_time_by_method(method):
+            return one_time_payments_today.filter(
+                method=method
+            ).aggregate(
+                s=Coalesce(Sum("amount"), Decimal("0.00"))
+            )["s"]
+
         active_memberships = ClientMembership.objects.filter(status="active").count()
         expired_memberships = ClientMembership.objects.filter(status="expired").count()
 
         return Response({
             "today_checkins": today_checkins,
             "today_income": float(today_income or 0),
+            "regular_today_income": float(regular_today_income or 0),
+            "one_time_today_income": float(one_time_today_income or 0),
+            "one_time_today_count": one_time_payments_today.count(),
             "month_income": float(month_income or 0),
 
-            "today_cash": float(by_method(payments_today, "cash") or 0),
-            "today_card": float(by_method(payments_today, "card") or 0),
-            "today_transfer": float(by_method(payments_today, "transfer") or 0),
+            "today_cash": float(
+                (by_method(payments_today, "cash") or 0)
+                + (one_time_by_method("cash") or 0)
+            ),
+
+            "today_card": float(
+                (by_method(payments_today, "card") or 0)
+                + (one_time_by_method("card") or 0)
+            ),
+
+            "today_transfer": float(
+                (by_method(payments_today, "transfer") or 0)
+                + (one_time_by_method("transfer") or 0)
+            ),
 
             "month_cash": float(by_method(payments_month, "cash") or 0),
             "month_card": float(by_method(payments_month, "card") or 0),
@@ -1321,6 +1354,28 @@ class CheckInViewSet(viewsets.ModelViewSet):
     search_fields = ["client__first_name", "client__last_name", "client__phone", "client__card_number"]
     ordering_fields = ["id", "created_at"]
 
+    def get_queryset(self):
+        qs = (
+            CheckIn.objects
+            .select_related("client")
+            .all()
+        )
+
+        client_id = self.request.query_params.get("client")
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs.order_by("-created_at", "-id")
+
     def create(self, request, *args, **kwargs):
         # print(1)
         client_id = request.data.get("client")
@@ -1560,3 +1615,163 @@ def logout_view(request):
     return redirect("login")
 
 
+class OneTimePaymentSerializer(serializers.ModelSerializer):
+    client_name = serializers.SerializerMethodField(read_only=True)
+
+    client_first_name = serializers.CharField(
+        source="client.first_name",
+        read_only=True,
+    )
+    client_last_name = serializers.CharField(
+        source="client.last_name",
+        read_only=True,
+    )
+    client_phone = serializers.CharField(
+        source="client.phone",
+        read_only=True,
+    )
+    client_passId = serializers.CharField(
+        source="client.passId",
+        read_only=True,
+    )
+    client_card_number = serializers.CharField(
+        source="client.card_number",
+        read_only=True,
+    )
+    client_comment = serializers.CharField(
+        source="client.comment",
+        read_only=True,
+    )
+
+    class Meta:
+        model = OneTimePayment
+        fields = [
+            "id",
+            "client",
+            "client_name",
+            "client_first_name",
+            "client_last_name",
+            "client_phone",
+            "client_passId",
+            "client_card_number",
+            "client_comment",
+            "amount",
+            "method",
+            "operation_date",
+            "comment",
+            "created_at",
+        ]
+
+        read_only_fields = [
+            "id",
+            "created_at",
+        ]
+
+    def get_client_name(self, obj):
+        return str(obj.client)
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "თანხა უნდა იყოს 0-ზე მეტი"
+            )
+
+        return value
+
+
+
+class OneTimePaymentViewSet(viewsets.ModelViewSet):
+    serializer_class = OneTimePaymentSerializer
+
+    filter_backends = [
+        SearchFilter,
+        OrderingFilter,
+    ]
+
+    search_fields = [
+        "client__first_name",
+        "client__last_name",
+        "client__phone",
+        "client__passId",
+        "client__card_number",
+        "comment",
+    ]
+
+    ordering_fields = [
+        "id",
+        "operation_date",
+        "amount",
+        "created_at",
+    ]
+
+    ordering = [
+        "-operation_date",
+        "-id",
+    ]
+
+    def get_queryset(self):
+        qs = (
+            OneTimePayment.objects
+            .select_related("client")
+            .all()
+        )
+
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        client_id = self.request.query_params.get("client")
+        method = self.request.query_params.get("method")
+
+        if date_from:
+            qs = qs.filter(
+                operation_date__date__gte=date_from
+            )
+
+        if date_to:
+            qs = qs.filter(
+                operation_date__date__lte=date_to
+            )
+
+        if client_id:
+            qs = qs.filter(client_id=client_id)
+
+        if method:
+            qs = qs.filter(method=method)
+
+        return qs.order_by("-operation_date", "-id")
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=False, methods=["get"])
+    def summary(self, request):
+        qs = self.filter_queryset(self.get_queryset())
+
+        total_amount = (
+            qs.aggregate(total=Sum("amount"))["total"]
+            or Decimal("0.00")
+        )
+
+        return Response({
+            "count": qs.count(),
+            "total_amount": float(total_amount),
+            "cash_amount": float(
+                qs.filter(method="cash").aggregate(
+                    total=Sum("amount")
+                )["total"] or 0
+            ),
+            "card_amount": float(
+                qs.filter(method="card").aggregate(
+                    total=Sum("amount")
+                )["total"] or 0
+            ),
+            "transfer_amount": float(
+                qs.filter(method="transfer").aggregate(
+                    total=Sum("amount")
+                )["total"] or 0
+            ),
+        })
+
+
+@login_required
+def one_time_payments_page(request):
+    return render(request, "one_time_payments.html")
