@@ -882,7 +882,8 @@ async function loadClients(q=""){
     $("e_fixed_start").value = p.fixed_start || "";
     $("e_fixed_end").value = p.fixed_end || "";
     $("e_method").value = p.method || "cash";
-    $("e_operation_date").value = isoToLocalInputValue(p.operation_date || p.created_at);
+    $("e_operation_date").value = p.operation_date.slice(0, 16);
+    console.log("p.operation_date="+p.operation_date)
 
     eTotalOverridden = false;
     recalc("e");
