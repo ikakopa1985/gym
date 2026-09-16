@@ -879,14 +879,370 @@ def insertor_update_new_user(ip=zktIp, pin="123", card='123456', password='3467'
     zk.table(UserAuthorize).upsert(access)
 
 
-def get_logs_users(ip=zktIp):
+def get_logs_users(request, ip=zktIp):
     stop()
-    print("get_logs")
-    zk = ZKAccess(f"protocol=TCP,ipaddress={ip},port=4370,timeout=4000,passwd=")
-    records = zk.table('User')
-    for record in records:
-        print(record)  # prints all users from the table
-    start()
+    time.sleep(2)
+
+    print("ZKT IP =", ip)
+    print("Connecting:", f"{ip}:4370")
+
+    try:
+        # ==========================================
+        # Card-ის ნორმალიზაცია
+        # 007 == 7
+        # 000245 == 245
+        # ==========================================
+        def normalize_card(card):
+            card = str(card or "").strip()
+
+            if not card:
+                return ""
+
+            try:
+                return str(int(card))
+            except (ValueError, TypeError):
+                return card
+
+
+        # ==========================================
+        # 1. ZKTeco-სთან დაკავშირება
+        # ==========================================
+        zk = ZKAccess(
+            f"protocol=TCP,"
+            f"ipaddress={ip},"
+            f"port=4370,"
+            f"timeout=10000,"
+            f"passwd="
+        )
+
+        print("ZKT CONNECTED")
+
+
+        # ==========================================
+        # 2. ZKTeco User-ების წამოღება
+        # ==========================================
+        records = zk.table("User")
+
+        zk_users = {}
+
+        for record in records:
+
+            pin = str(record.pin or "").strip()
+            card = str(record.card or "").strip()
+
+            if not pin:
+                continue
+
+            zk_users[pin] = {
+                "pin": pin,
+                "card": card,
+            }
+
+        print("ZKT users:", len(zk_users))
+
+
+        # ==========================================
+        # 3. რეალურად აქტიური membership-ები
+        # ==========================================
+        today = timezone.localdate()
+
+        active_memberships = (
+            ClientMembership.objects
+            .select_related(
+                "client",
+                "membership"
+            )
+            .filter(
+                status="active",
+                start_date__lte=today
+            )
+            .filter(
+                Q(
+                    membership__membership_type="limited",
+                    remaining_visits__gt=0
+                )
+                |
+                Q(
+                    membership__membership_type__in=[
+                        "unlimited",
+                        "fixed"
+                    ],
+                    end_date__gte=today
+                )
+            )
+        )
+
+
+        # ==========================================
+        # Client ID -> ClientMembership
+        # ==========================================
+        active_clients = {}
+
+        for cm in active_memberships:
+            active_clients[str(cm.client_id)] = cm
+
+        print("Active clients:", len(active_clients))
+
+
+        # ==========================================
+        # 4. DB-ში აქტიურია,
+        #    მაგრამ ZKTeco-ში არ არის
+        # ==========================================
+        missing_in_zk = []
+
+        for client_id, cm in active_clients.items():
+
+            if client_id not in zk_users:
+
+                missing_in_zk.append({
+                    "client_id": cm.client_id,
+
+                    "client_name": (
+                        f"{cm.client.first_name} "
+                        f"{cm.client.last_name}"
+                    ),
+
+                    "card_number":
+                        cm.client.card_number,
+
+                    "membership_id":
+                        cm.membership_id,
+
+                    "membership_name":
+                        cm.membership.name,
+
+                    "membership_type":
+                        cm.membership.membership_type,
+
+                    "start_date":
+                        str(cm.start_date),
+
+                    "end_date":
+                        str(cm.end_date)
+                        if cm.end_date else None,
+
+                    "remaining_visits":
+                        cm.remaining_visits,
+
+                    "problem":
+                        "ACTIVE_BUT_NOT_IN_ZK"
+                })
+
+
+        # ==========================================
+        # 5. ZKTeco-ში არის,
+        #    მაგრამ DB-ში აქტიური აღარ არის
+        # ==========================================
+        should_delete_from_zk = []
+
+        for pin, zk_user in zk_users.items():
+
+            if pin in active_clients:
+                continue
+
+            try:
+                client_id = int(pin)
+
+                client = Client.objects.filter(
+                    id=client_id
+                ).first()
+
+                # ----------------------------------
+                # Client საერთოდ აღარ არსებობს DB-ში
+                # ----------------------------------
+                if client is None:
+
+                    should_delete_from_zk.append({
+                        "client_id": None,
+                        "pin": pin,
+                        "zk_card": zk_user["card"],
+
+                        "problem":
+                            "ZK_USER_NOT_FOUND_IN_DATABASE"
+                    })
+
+                    continue
+
+
+                # ----------------------------------
+                # Client არსებობს,
+                # მაგრამ აქტიური membership არ აქვს
+                # ----------------------------------
+                should_delete_from_zk.append({
+                    "client_id":
+                        client.id,
+
+                    "client_name":
+                        f"{client.first_name} {client.last_name}",
+
+                    "card_number":
+                        client.card_number,
+
+                    "zk_card":
+                        zk_user["card"],
+
+                    "problem":
+                        "IN_ZK_BUT_NOT_ACTIVE"
+                })
+
+
+            except (ValueError, TypeError):
+
+                # PIN საერთოდ არ არის რიცხვითი
+                should_delete_from_zk.append({
+                    "client_id": None,
+
+                    "pin": pin,
+
+                    "zk_card":
+                        zk_user["card"],
+
+                    "problem":
+                        "INVALID_ZK_PIN"
+                })
+
+
+        # ==========================================
+        # 6. Card mismatch
+        # ==========================================
+        card_mismatch = []
+
+        for client_id, cm in active_clients.items():
+
+            # თუ ZKT-ში საერთოდ არ არის,
+            # ზემოთ missing_in_zk-ში უკვე ჩავარდა
+            if client_id not in zk_users:
+                continue
+
+
+            database_card = str(
+                cm.client.card_number or ""
+            ).strip()
+
+            zk_card = str(
+                zk_users[client_id]["card"] or ""
+            ).strip()
+
+
+            # --------------------------------------
+            # 007 == 7
+            # 00123 == 123
+            # --------------------------------------
+            normalized_db_card = normalize_card(
+                database_card
+            )
+
+            normalized_zk_card = normalize_card(
+                zk_card
+            )
+
+
+            if normalized_db_card != normalized_zk_card:
+
+                card_mismatch.append({
+                    "client_id":
+                        cm.client_id,
+
+                    "client_name":
+                        f"{cm.client.first_name} "
+                        f"{cm.client.last_name}",
+
+                    "database_card":
+                        database_card,
+
+                    "zk_card":
+                        zk_card,
+
+                    "normalized_database_card":
+                        normalized_db_card,
+
+                    "normalized_zk_card":
+                        normalized_zk_card,
+
+                    "problem":
+                        "CARD_MISMATCH"
+                })
+
+
+        # ==========================================
+        # 7. JSON Response
+        # ==========================================
+        response_data = {
+
+            "status": "ok",
+
+            "date": str(today),
+
+            "summary": {
+
+                "zk_users":
+                    len(zk_users),
+
+                "active_clients":
+                    len(active_clients),
+
+                "missing_in_zk":
+                    len(missing_in_zk),
+
+                "should_delete_from_zk":
+                    len(should_delete_from_zk),
+
+                "card_mismatch":
+                    len(card_mismatch),
+            },
+
+
+            # DB-ში აქტიურია,
+            # ZKT-ში არ არის
+            "missing_in_zk":
+                missing_in_zk,
+
+
+            # ZKT-ში არის,
+            # მაგრამ აქტიური membership არ აქვს
+            "should_delete_from_zk":
+                should_delete_from_zk,
+
+
+            # ორივეგან არის,
+            # მაგრამ card განსხვავდება
+            "card_mismatch":
+                card_mismatch,
+        }
+
+
+        return JsonResponse(
+            response_data,
+
+            # ქართული პირდაპირ გამოჩნდება
+            json_dumps_params={
+                "ensure_ascii": False,
+                "indent": 2,
+            }
+        )
+
+
+    except Exception as e:
+
+        print("ZKT ERROR:", repr(e))
+
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": str(e),
+            },
+            status=500,
+            json_dumps_params={
+                "ensure_ascii": False,
+                "indent": 2,
+            }
+        )
+
+
+    finally:
+        # listener თავიდან გავუშვათ
+        time.sleep(1)
+        start()
 
 
 def get_logs_UserAuthorize(ip=zktIp):
@@ -943,6 +1299,277 @@ def del_logs(ip=zktIp):
         events.delete(e)
     start()
         # print(e,"deleted")
+
+
+
+def reset_zk_and_queue_active_users(request, ip=zktIp):
+    stop()
+    time.sleep(2)
+
+    zk = None
+
+    try:
+        # =====================================================
+        # 1. ZKTeco-სთან დაკავშირება
+        # =====================================================
+        print("Connecting to ZKT:", ip)
+
+        zk = ZKAccess(
+            f"protocol=TCP,"
+            f"ipaddress={ip},"
+            f"port=4370,"
+            f"timeout=10000,"
+            f"passwd="
+        )
+
+        print("ZKT CONNECTED")
+
+
+        # =====================================================
+        # 2. რამდენი User არის ZKTeco-ში
+        # =====================================================
+        user_table = zk.table("User")
+
+        zk_users_before = user_table.count()
+
+        print("ZKT users before delete:", zk_users_before)
+
+
+        # =====================================================
+        # 3. ყველა User-ის წაშლა ZKTeco-დან
+        #
+        # pyzkaccess ოფიციალური მეთოდი:
+        # QuerySet.delete_all()
+        # =====================================================
+        user_table.delete_all()
+
+        print("ALL ZKT USERS DELETED")
+
+
+        # =====================================================
+        # 4. შევამოწმოთ რამდენი დარჩა
+        # =====================================================
+        zk_users_after = zk.table("User").count()
+
+        print("ZKT users after delete:", zk_users_after)
+
+
+        # =====================================================
+        # 5. აქტიური Membership-ების მოძებნა
+        # =====================================================
+        today = timezone.localdate()
+
+        active_memberships = (
+            ClientMembership.objects
+            .select_related(
+                "client",
+                "membership"
+            )
+            .filter(
+                status="active",
+                start_date__lte=today
+            )
+            .filter(
+                # ---------------------------------------------
+                # limited:
+                # დარჩენილი ვიზიტი > 0
+                # ---------------------------------------------
+                Q(
+                    membership__membership_type="limited",
+                    remaining_visits__gt=0
+                )
+
+                |
+
+                # ---------------------------------------------
+                # unlimited / fixed:
+                # end_date ჯერ არ გასულა
+                # ---------------------------------------------
+                Q(
+                    membership__membership_type__in=[
+                        "unlimited",
+                        "fixed"
+                    ],
+                    end_date__gte=today
+                )
+            )
+        )
+
+
+        # =====================================================
+        # 6. უნიკალური Client ID-ები
+        #
+        # თუ ერთ კლიენტს რამდენიმე აქტიური membership აქვს,
+        # ClientSync-ში მხოლოდ ერთხელ მოხვდება
+        # =====================================================
+        active_client_ids = list(
+            active_memberships
+            .values_list("client_id", flat=True)
+            .distinct()
+        )
+
+        print("Active clients:", len(active_client_ids))
+
+
+        # =====================================================
+        # 7. აქტიური კლიენტების წამოღება
+        # =====================================================
+        active_clients = list(
+            Client.objects
+            .filter(id__in=active_client_ids)
+            .order_by("id")
+        )
+
+
+        # =====================================================
+        # 8. ძველი pending ADD ჩანაწერების წაშლა
+        #
+        # რადგან ახლა ZKT მთლიანად გავასუფთავეთ,
+        # თავიდან ვქმნით add queue-ს.
+        # =====================================================
+        old_pending = ClientSync.objects.filter(
+            action="add",
+            status="pending"
+        )
+
+        old_pending_count = old_pending.count()
+
+        old_pending.delete()
+
+        print(
+            "Old pending ADD tasks deleted:",
+            old_pending_count
+        )
+
+
+        # =====================================================
+        # 9. ყველა Active Client-ის დასასინქრონიზებელ
+        # სიაში დამატება
+        # =====================================================
+        sync_objects = []
+
+        for client in active_clients:
+
+            sync_objects.append(
+                ClientSync(
+                    client=client,
+                    action="add",
+                    status="pending"
+                )
+            )
+
+
+        ClientSync.objects.bulk_create(
+            sync_objects
+        )
+
+        print(
+            "New sync tasks created:",
+            len(sync_objects)
+        )
+
+
+        # =====================================================
+        # 10. JSON-ში დასაბრუნებელი სია
+        # =====================================================
+        queued_clients = []
+
+        for client in active_clients:
+
+            queued_clients.append({
+                "client_id": client.id,
+
+                "client_name":
+                    f"{client.first_name} {client.last_name}",
+
+                "card_number":
+                    client.card_number,
+
+                "action":
+                    "add",
+
+                "status":
+                    "pending",
+            })
+
+
+        # =====================================================
+        # 11. RESULT
+        # =====================================================
+        return JsonResponse(
+            {
+                "status": "ok",
+
+                "message":
+                    "ZKT გასუფთავდა და აქტიური კლიენტები "
+                    "დაემატა სინქრონიზაციის სიაში",
+
+                "summary": {
+                    "zk_users_before":
+                        zk_users_before,
+
+                    "zk_users_after":
+                        zk_users_after,
+
+                    "active_clients":
+                        len(active_clients),
+
+                    "old_pending_deleted":
+                        old_pending_count,
+
+                    "sync_tasks_created":
+                        len(sync_objects),
+                },
+
+                "queued_clients":
+                    queued_clients,
+            },
+
+            json_dumps_params={
+                "ensure_ascii": False,
+                "indent": 2,
+            }
+        )
+
+
+    except Exception as e:
+
+        print("RESET ZKT ERROR:", repr(e))
+
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": str(e),
+            },
+            status=500,
+            json_dumps_params={
+                "ensure_ascii": False,
+                "indent": 2,
+            }
+        )
+
+
+    finally:
+        # =====================================================
+        # 12. ZKT connection-ის დახურვა
+        # =====================================================
+        if zk is not None:
+            try:
+                zk.disconnect()
+                print("ZKT DISCONNECTED")
+            except Exception as e:
+                print("Disconnect error:", repr(e))
+
+
+        # =====================================================
+        # 13. Listener-ის თავიდან გაშვება
+        # =====================================================
+        time.sleep(2)
+
+        start()
+
+
+
 
 
 def delete_user(pin, ip=zktIp):

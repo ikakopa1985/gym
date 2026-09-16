@@ -47,7 +47,10 @@ urlpatterns = [
     path("zk/imitate/", zk_imitate),
 
     path("tablet/", tablet_page, name="tablet"),
-
+    path("glu/", get_logs_users, name="get_logs_users"),
+    path("wau/", reset_zk_and_queue_active_users, name="reset_zk_and_queue_active_users"),
+    
+    
 
     # API endpoints:
     path("api/", include(router.urls)),
