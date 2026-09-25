@@ -28,7 +28,7 @@ urlpatterns = [
     path("checkins/", checkins_page, name="checkins_page"),
     path("reports/", reports_page, name="reports_page"),
     path("doorOpen/", OpenDoor, name="OpenDoor"),
-    path("sync/", sync, name="sync"),
+    path("syncall/", syncall, name="syncall"),
     path("syncpartial/", syncpartial, name="syncpartial"),
     path("sync/status/", sync_status),
     path("card-payments/", card_payments_page, name="card_payments"),
@@ -49,7 +49,12 @@ urlpatterns = [
     path("tablet/", tablet_page, name="tablet"),
     path("glu/", get_logs_users, name="get_logs_users"),
     path("wau/", reset_zk_and_queue_active_users, name="reset_zk_and_queue_active_users"),
-    
+
+    path(
+        "zkt/revision-status/",
+        zkt_revision_status,
+        name="zkt_revision_status"
+    ),
     
 
     # API endpoints:

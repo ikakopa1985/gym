@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 from decimal import Decimal
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, F
 from django.db.models.functions import Coalesce
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -29,7 +29,7 @@ from gym.settings import ipSettings
 from django.db.models import Prefetch
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
-
+import json
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
 
@@ -37,6 +37,15 @@ from .models import *
 
 
 zktIp =  ipSettings
+
+
+
+def increase_local_revision():
+    revision = RevisionNumber.get_revision()
+
+    RevisionNumber.objects.filter(pk=revision.pk).update(
+        local_revizion_number=F("local_revizion_number") + 1
+    )
 
 
 @login_required
@@ -266,6 +275,27 @@ class ClientViewSet(viewsets.ModelViewSet):
         client = self.get_object()
         qs = client.memberships.select_related("membership").all()
         return Response(ClientMembershipSerializer(qs, many=True).data)
+
+    def perform_update(self, serializer):
+        client = self.get_object()
+
+        # ძველი ბარათის ნომერი
+        old_card = str(client.card_number or "").strip()
+
+        # ჯერ ვინახავთ ცვლილებას
+        updated_client = serializer.save()
+
+        # ახალი ბარათის ნომერი
+        new_card = str(updated_client.card_number or "").strip()
+
+        # მხოლოდ რეალური ცვლილების შემთხვევაში
+        if old_card != new_card:
+            increase_local_revision()
+
+            print(
+                f"CARD CHANGED: client={updated_client.id}, "
+                f"{old_card} -> {new_card}"
+            )
 
 
 class ClientMembershipViewSet(viewsets.ModelViewSet):
@@ -818,17 +848,275 @@ def OpenDoor(request):
     return JsonResponse({"status": "ok"})
 
 
-def sync(request):
-    clients = Client.objects.filter(
-        memberships__status="active"
-    ).distinct()
-    for client in clients:
-        print(client.id, client.card_number)
-        insertor_update_new_user(pin=str(client.id),card=client.card_number)
-    return JsonResponse({"status": "ok"})
+def syncall(request=None):
+    print("syncAll")
+
+    # =========================================================
+    # 1. ZKT / DB შედარება
+    # =========================================================
+    resp = get_logs_users()
+
+    data = json.loads(
+        resp.content.decode("utf-8")
+    )
+
+    print(data)
+    print(data["status"])
+    print(data["summary"])
 
 
-def syncpartial(request):
+    if data["status"] != "ok":
+        return JsonResponse(
+            {
+                "status": "error",
+                "error": data.get("error", "Sync check error")
+            },
+            status=500
+        )
+
+
+    created_add = 0
+    created_delete = 0
+    skipped = 0
+
+
+    # =========================================================
+    # 2. DB-ში ACTIVE არის,
+    #    მაგრამ ZKT-ში არ არის
+    #
+    #    => ADD
+    # =========================================================
+    for item in data.get("missing_in_zk", []):
+
+        client_id = item.get("client_id")
+
+        if not client_id:
+            continue
+
+        client = Client.objects.filter(
+            id=client_id
+        ).first()
+
+        if not client:
+            print(
+                "Client not found:",
+                client_id
+            )
+            continue
+
+
+        # უკვე ხომ არ გვაქვს pending ADD
+        exists = ClientSync.objects.filter(
+            client=client,
+            action="add",
+            status="pending"
+        ).exists()
+
+
+        if exists:
+            print(
+                "ADD already pending:",
+                client.id
+            )
+
+            skipped += 1
+            continue
+
+
+        ClientSync.objects.create(
+            client=client,
+            action="add",
+            status="pending"
+        )
+
+        created_add += 1
+
+        print(
+            "ADD queued:",
+            client.id,
+            client.first_name,
+            client.last_name
+        )
+
+
+    # =========================================================
+    # 3. ZKT-ში არის,
+    #    მაგრამ ACTIVE აღარ არის
+    #
+    #    => DELETE
+    # =========================================================
+    for item in data.get(
+        "should_delete_from_zk",
+        []
+    ):
+
+        client_id = item.get("client_id")
+
+        # -----------------------------------------
+        # თუ client_id None არის,
+        # ეს ნიშნავს რომ ZKT-ში PIN არის,
+        # მაგრამ DB-ში Client აღარ არსებობს.
+        #
+        # ClientSync client FK-ს გამო
+        # აქ ჩანაწერს ვერ შევქმნით.
+        # -----------------------------------------
+        if not client_id:
+
+            print(
+                "Cannot queue DELETE - "
+                "client not in DB:",
+                item.get("pin"),
+                item.get("problem")
+            )
+
+            continue
+
+
+        client = Client.objects.filter(
+            id=client_id
+        ).first()
+
+        if not client:
+            continue
+
+
+        # უკვე ხომ არ გვაქვს pending DELETE
+        exists = ClientSync.objects.filter(
+            client=client,
+            action="delete",
+            status="pending"
+        ).exists()
+
+
+        if exists:
+
+            print(
+                "DELETE already pending:",
+                client.id
+            )
+
+            skipped += 1
+            continue
+
+
+        ClientSync.objects.create(
+            client=client,
+            action="delete",
+            status="pending"
+        )
+
+        created_delete += 1
+
+        print(
+            "DELETE queued:",
+            client.id,
+            client.first_name,
+            client.last_name
+        )
+
+    # =========================================================
+    # 4 , CARD MISMATCH
+    # DB-ში და ZKT-ში user არსებობს,
+    # მაგრამ card_number განსხვავებულია
+    #
+    # => UPDATE (ADD/upsert)
+    # =========================================================
+    for item in data.get("card_mismatch", []):
+
+        client_id = item.get("client_id")
+
+        if not client_id:
+            continue
+
+        client = Client.objects.filter(
+            id=client_id
+        ).first()
+
+        if not client:
+            print(
+                "CARD MISMATCH - Client not found:",
+                client_id
+            )
+            continue
+
+        # უკვე ხომ არ გვაქვს pending ADD/UPDATE
+        exists = ClientSync.objects.filter(
+            client=client,
+            action="add",
+            status__in=["pending", "error"]
+        ).exists()
+
+        if exists:
+            print(
+                "CARD UPDATE already pending:",
+                client.id
+            )
+            skipped += 1
+            continue
+
+        ClientSync.objects.create(
+            client=client,
+            action="add",
+            status="pending"
+        )
+
+        created_add += 1
+
+        print(
+            "CARD UPDATE queued:",
+            client.id,
+            "ZKT card:",
+            item.get("zk_card"),
+            "-> DB card:",
+            item.get("database_card")
+        )
+
+
+    # =========================================================
+    # 5. შედეგი
+    # =========================================================
+
+    revision = RevisionNumber.get_revision()
+
+    revision.zkt_revizion_number = revision.local_revizion_number
+    revision.save(update_fields=["zkt_revizion_number"])
+
+
+    result = {
+        "status": "ok",
+
+        "zkt_summary": data.get(
+            "summary",
+            {}
+        ),
+
+        "sync": {
+            "add_created": created_add,
+            "delete_created": created_delete,
+            "total_created":
+                created_add + created_delete,
+
+            "skipped": skipped
+        }
+    }
+
+
+    print("SYNC RESULT:")
+    print(result)
+    start()
+    syncpartial()
+
+    return JsonResponse(
+        result,
+        json_dumps_params={
+            "ensure_ascii": False,
+            "indent": 2
+        }
+    )
+
+
+def syncpartial(request=None):
+    print("def partial sync")
     stop()
     # asyncio.sleep(2)
     time.sleep(2)
@@ -865,7 +1153,10 @@ def syncpartial(request):
     return JsonResponse({"status": "ok"})
 
 
-def insertor_update_new_user(ip=zktIp, pin="123", card='123456', password='3467'):
+
+# პინი არის უზერ id პაროლი არის კოდი ასაკრეფი და ცარდ არის ბარათი
+
+def insertor_update_new_user(ip=zktIp, pin="123", card='123456', password='4376'):
     print("insertor_update_new_user")
     zk = ZKAccess(f"protocol=TCP,ipaddress={ip},port=4370,timeout=4000,passwd=")
     my_user = User(card=card, pin=pin, password=password, super_authorize=False)
@@ -879,7 +1170,8 @@ def insertor_update_new_user(ip=zktIp, pin="123", card='123456', password='3467'
     zk.table(UserAuthorize).upsert(access)
 
 
-def get_logs_users(request, ip=zktIp):
+def get_logs_users(request=None, ip=zktIp):
+    print("def  get_logs_users",)
     stop()
     time.sleep(2)
 
@@ -938,7 +1230,8 @@ def get_logs_users(request, ip=zktIp):
                 "card": card,
             }
 
-        print("ZKT users:", len(zk_users))
+        print("ZKT users  count:", len(zk_users))
+        print("ZKT users:", zk_users)
 
 
         # ==========================================
@@ -1028,6 +1321,7 @@ def get_logs_users(request, ip=zktIp):
                         "ACTIVE_BUT_NOT_IN_ZK"
                 })
 
+        print("missing_in_zk -", missing_in_zk)
 
         # ==========================================
         # 5. ZKTeco-ში არის,
@@ -1101,6 +1395,7 @@ def get_logs_users(request, ip=zktIp):
                         "INVALID_ZK_PIN"
                 })
 
+        print("should_delete_from_zk",should_delete_from_zk)
 
         # ==========================================
         # 6. Card mismatch
@@ -1163,7 +1458,7 @@ def get_logs_users(request, ip=zktIp):
                         "CARD_MISMATCH"
                 })
 
-
+        print("card_mismatch",card_mismatch)
         # ==========================================
         # 7. JSON Response
         # ==========================================
@@ -1666,6 +1961,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 if cm.status != "expired":
                     cm.status = "expired"
                     cm.save(update_fields=["status"])
+        increase_local_revision()
 
     def _has_membership_overlap(self, client, start_date, end_date, exclude_cm_id=None):
         qs = ClientMembership.objects.filter(client=client)
@@ -1780,6 +2076,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
             # 🔹 recalculation
             self._recalc_client_memberships(client)
+            increase_local_revision()
 
         return Response(
             PaymentSerializer(payment).data,
@@ -1931,6 +2228,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
             # 🔹 recalculation
             self._recalc_client_memberships(client)
+            increase_local_revision()
 
         return Response(PaymentSerializer(payment).data)
 
@@ -1967,6 +2265,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
             cm.delete()
 
             payment.delete()
+
+            increase_local_revision()
 
             # 🔹 recalculation
             # self._recalc_client_memberships(client)
@@ -2177,6 +2477,7 @@ class CardPaymentViewSet(viewsets.ModelViewSet):
         if nc_card not in (None, "", "null"):
             client.card_number = str(nc_card).strip()
             client.save(update_fields=["card_number"])
+            increase_local_revision()
 
         serializer = self.get_serializer(data={
             "client": client.id,
@@ -2203,6 +2504,7 @@ class CardPaymentViewSet(viewsets.ModelViewSet):
         if nc_card not in (None, "", "null"):
             client.card_number = str(nc_card).strip()
             client.save(update_fields=["card_number"])
+            increase_local_revision()
 
         data = request.data.copy()
         data["client"] = client.id
@@ -2402,3 +2704,18 @@ class OneTimePaymentViewSet(viewsets.ModelViewSet):
 @login_required
 def one_time_payments_page(request):
     return render(request, "one_time_payments.html")
+
+
+
+
+def zkt_revision_status(request):
+    revision = RevisionNumber.get_revision()
+
+    return JsonResponse({
+        "zkt_revision_number": revision.zkt_revizion_number,
+        "local_revision_number": revision.local_revizion_number,
+        "sync_required": (
+            revision.zkt_revizion_number <
+            revision.local_revizion_number
+        )
+    })

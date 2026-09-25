@@ -145,7 +145,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 
 
-ipSettings = "172.26.0.245"
+ipSettings = "172.26.3.245"
 # ipSettings = "192.168.10.225"
 
 

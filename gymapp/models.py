@@ -346,3 +346,19 @@ class OneTimePayment(models.Model):
 
     def __str__(self):
         return f"{self.client} - {self.amount}₾"
+
+
+class RevisionNumber(models.Model):
+    zkt_revizion_number = models.PositiveBigIntegerField(default=0)
+    local_revizion_number = models.PositiveBigIntegerField(default=0)
+
+    @classmethod
+    def get_revision(cls):
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                "zkt_revizion_number": 0,
+                "local_revizion_number": 0,
+            }
+        )
+        return obj

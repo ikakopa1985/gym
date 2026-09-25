@@ -328,10 +328,10 @@
               ⛔ ვადაგასულების ნახვა
             </button>
 
-            <button class="btn"  style="width:100%; justify-content:center; margin-top:10px; display:none" type="button" id="btnsyncall">
-              🔄 სინქრონიზაცია სრული
+            <button class="btn"  style="width:100%; justify-content:center; margin-top:10px; " type="button" id="btnsyncall">
+              🔄 სრული სინქრონიზაცია
             </button>
-          <button class="btn"  style="width:100%; justify-content:center; margin-top:10px" type="button" id="btnsync">
+          <button class="btn"  style="width:100%; justify-content:center; margin-top:10px; display: none" type="button" id="btnsync">
               🔄 სინქრონიზაცია
             </button>
         </div>
@@ -704,34 +704,67 @@ async function applySearch(){
   }
 }
 
-async function sync(){
+async function syncall(){
 
-  const btn = document.getElementById("btnsync");
+  const btn = document.getElementById("btnsyncall");
 
   btn.disabled = true;
-  btn.innerHTML = `<span class="spin"></span> სინქრონიზაცია...`;
+  btn.innerHTML = `<span class="spin"></span> დაელოდეთ...`;
 
-  try{
+  try {
 
-    const res = await fetch("/syncpartial/", {
+    const res = await fetch("/syncall/", {
       method: "POST",
       headers: {
-        "Content-Type":"application/json",
+        "Content-Type": "application/json",
         "X-CSRFToken": csrftoken
       },
       body: JSON.stringify({ client: 0 })
     });
 
-  }catch(e){
-    console.log(e);
+    const data = await res.json();
+
+    // თუ backend-მა შეცდომა დააბრუნა
+    if (!res.ok || data.status !== "ok") {
+      alert(
+        "❌ სინქრონიზაციის შეცდომა:\n" +
+        (data.error || "უცნობი შეცდომა")
+      );
+      return;
+    }
+
+    const added = data.sync?.add_created || 0;
+    const deleted = data.sync?.delete_created || 0;
+    const total = data.sync?.total_created || 0;
+    const skipped = data.sync?.skipped || 0;
+
+    alert(
+      "✅ სინქრონიზაცია დასრულდა\n\n"
+      //       +
+      // "➕ დამატებული: " + added + "\n" +
+      // "➖ წაშლილი: " + deleted + "\n" +
+      // "🔄 სულ განახლებული: " + total + "\n" +
+      // "⏭ გამოტოვებული: " + skipped
+    );
+
+  } catch(e) {
+
+    console.error(e);
+
+    alert(
+      "❌ სერვერთან დაკავშირების შეცდომა\n\n" +
+      e.message
+    );
+
+  } finally {
+
+    btn.disabled = false;
+    btn.innerHTML = "🔄 სრული სინქრონიზაცია";
+
+    await checkSyncStatus();
+    await checkRevisionStatus();
   }
-
-  btn.disabled = false;
-  btn.innerHTML = "🔄 სინქრონიზაცია";
-
-  await checkSyncStatus();
 }
-
 
 
   async function loadClients(){
@@ -1073,6 +1106,43 @@ document.getElementById("card-info").addEventListener("click", function(e){
     }
 });
 
+async function checkRevisionStatus() {
+    try {
+        const res = await fetch("/zkt/revision-status/");
+
+        if (!res.ok) {
+            return;
+        }
+
+        const data = await res.json();
+
+        const btn = document.getElementById("btnsyncall");
+
+        if (!btn) {
+            return;
+        }
+
+        if (data.sync_required) {
+            btn.classList.add("blink");
+        } else {
+            btn.classList.remove("blink");
+        }
+
+        console.log(
+            "ZKT revision:",
+            data.zkt_revision_number,
+            "Local revision:",
+            data.local_revision_number
+        );
+
+    } catch (e) {
+        console.error("Revision status error:", e);
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    checkRevisionStatus();
+});
 
 async function checkSyncStatus(){
 
